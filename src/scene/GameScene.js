@@ -21,13 +21,26 @@ class GameScene extends Phaser.Scene {
     
         // Player
         this.sakura = this.physics.add.sprite(50, 400, 'player_walk');
-    
+        // Adjust player hitbox
+        this.sakura.body.setSize(45, 80); // Reducimos la altura de 110 a 90
+        this.sakura.body.setOffset(45, 50); // Aumentamos el offset Y de 20 a 40
+
+        //Enemy
+        this.enemy = this.physics.add.sprite(700, 400, 'enemy_dialogue');
+        // Adjust enemy hitbox
+        this.enemy.body.setSize(45, 90); // Reducimos la altura de 110 a 90
+        this.enemy.body.setOffset(45, 40); // Aumentamos el offset Y de 20 a 40
+        // Adjust enemy hitbox
+        this.enemy.body.setSize(45, 80); // Reduce width, keep height appropriate
+        this.enemy.body.setOffset(45, 50); // Adjust offset to center the hitbox
+        
         // Keys
         this.keys = this.input.keyboard.addKeys({
             left: Phaser.Input.Keyboard.KeyCodes.LEFT,
             right: Phaser.Input.Keyboard.KeyCodes.RIGHT,
             space: Phaser.Input.Keyboard.KeyCodes.SPACE,
-            c: Phaser.Input.Keyboard.KeyCodes.C
+            c: Phaser.Input.Keyboard.KeyCodes.C,
+            s: Phaser.Input.Keyboard.KeyCodes.S
         });
     
         // Animación
@@ -58,33 +71,71 @@ class GameScene extends Phaser.Scene {
             frameRate: 14,
             repeat: 0
         });
+
+        // Animaciones enemigo
+        this.anims.create({
+            key:'enemy_dialogue',
+            frames: this.anims.generateFrameNumbers('enemy_dialogue', { start: 0, end: 10 }),
+            frameRate: 10,
+            repeat: 0
+        });
     
+        // Definir límites del mundo - reduced size
+        this.physics.world.setBounds(0, 0, 800, 500); // Smaller bounds
+        this.sakura.setCollideWorldBounds(true);
+        this.enemy.setCollideWorldBounds(true);
+        
         // colisiones
         this.physics.add.collider(this.sakura, this.floor);
+        this.physics.add.collider(this.enemy, this.floor);
+        
+        // Cambiamos overlap por collider para que no puedan atravesarse
+        this.physics.add.collider(this.sakura, this.enemy, this.handleEnemyCollision, null, this);
+    
+        // Add this after setting up all physics bodies
+                this.physics.world.createDebugGraphic();
+                this.physics.world.debugGraphic.visible = true;
+                
+                // Add this line to make world bounds visible
+                this.physics.world.drawDebug = true;
+                
+                // Optional: Set different colors for different types of bodies
+                this.physics.world.debugGraphic.lineStyle(1, 0x00ff00, 1); // Green for world bounds
+    }
+
+    // Nuevo método para manejar la colisión con el enemigo
+    handleEnemyCollision() {
+        console.log("colision");
+        // Aquí puedes agregar lógica adicional para la colisión
+        // como reducir vida, mostrar animación de daño, etc.
     }
 
     update() {
         // CONTROLES
-        // Definir velocidad de movimiento
-        const moveSpeed = 5; // Aumentado de 3 a 5 para mayor velocidad
+        // Definir velocidad de movimiento - adjusted for velocity-based movement
+        const moveSpeed = 1800; // Single value instead of multiplying later
+        
+        // Reset velocity at the start of each update to prevent unwanted movement
+        this.sakura.setVelocityX(0);
         
         //Izquierda
         if(this.keys.left.isDown){
-            this.sakura.x -= moveSpeed; // Usando la variable de velocidad
+            this.sakura.setVelocityX(-moveSpeed); // Simplified velocity value
             this.sakura.anims.play('sakura-walk', true);
-            this.sakura.setFlipX(true); // Asegura que mire a la derecha
+            this.sakura.setFlipX(true);
         }
         //Derecha
         if(this.keys.right.isDown){
-            this.sakura.x += moveSpeed; // Usando la variable de velocidad
+            this.sakura.setVelocityX(moveSpeed); // Simplified velocity value
             this.sakura.anims.play('sakura-walk', true);
-            this.sakura.setFlipX(false); // Voltea hacia la izquierda
+            this.sakura.setFlipX(false);
         }
         //Salto
         if(this.keys.space.isDown && this.sakura.body.touching.down){
-            this.sakura.setVelocityY(-350); // Salta hacia arriba con fuerza
+            this.sakura.setVelocityY(-350);
         }
 
+        // Rest of the update method remains unchanged
         if(!this.sakura.body.touching.down){
             this.sakura.anims.play('sakura-protection', true);
         }
@@ -99,6 +150,26 @@ class GameScene extends Phaser.Scene {
         if(this.sakura.body.touching.down && !this.keys.left.isDown && !this.keys.right.isDown && !this.keys.c.isDown){
             this.sakura.anims.play("sakura-idle", true);
         }
+
+        //Enemigo
+        // Movimiento del enemigo solo cuando se presiona 's'
+        if (this.keys.s.isDown) {
+            this.enemy.setVelocityX(-500);
+        } else {
+            // Detener al enemigo cuando no se presiona la tecla
+            this.enemy.setVelocityX(0);
+        }
+        
+
+        // Hacer que el enemigo mire hacia el jugador
+        if (this.enemy.x > this.sakura.x) {
+            
+            this.enemy.setFlipX(true); // Enemigo mira hacia la izquierda (hacia el jugador)
+        } else {
+            this.enemy.setFlipX(false); // Enemigo mira hacia la derecha (hacia el jugador)
+        }
+        // Reproducir animación del enemigo       
+        this.enemy.anims.play('enemy_dialogue', true);
     }
 }
 
