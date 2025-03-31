@@ -13,6 +13,10 @@ class PreloadScene extends Phaser.Scene {
         this.load.spritesheet('player_idle', './assets/character/Idle.png', { frameWidth: 128, frameHeight: 128 });
         this.load.spritesheet('player_Protection', './assets/character/Protection.png', { frameWidth: 128, frameHeight: 128 });
         this.load.spritesheet('player_attack', './assets/character/Attack.png', { frameWidth: 128, frameHeight: 128 });
+
+        // Enemy 
+        this.load.spritesheet('enemy_dialogue', './assets/enemy/Dialogue.png', { frameWidth: 128, frameHeight: 128 });
+        this.load.spritesheet('enemy_walk', './assets/enemy/enemy-walk.png', { frameWidth: 128, frameHeight: 128 });
     }
 
     create() {

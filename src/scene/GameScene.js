@@ -83,7 +83,7 @@ class GameScene extends Phaser.Scene {
         this.anims.create({
             key:"enemy_walk",
             frames: this.anims.generateFrameNumbers('enemy_walk', { start: 0, end: 11 }),
-            frameRate: 1,
+            frameRate: 10,
             repeat: 0
         })
     
@@ -162,10 +162,10 @@ class GameScene extends Phaser.Scene {
         // Movimiento del enemigo solo cuando se presiona 's'
         if (this.keys.s.isDown) {
             if (this.enemy.x > this.sakura.x) {
-                this.enemy.setVelocityX(-200); // Velocidad negativa para moverse a la izquierda
+                this.enemy.setVelocityX(-900); // Velocidad negativa para moverse a la izquierda
                 this.enemy.setFlipX(true); // Enemigo mira hacia la izquierda (hacia el jugador)
             } else if (this.enemy.x < this.sakura.x) {
-                this.enemy.setVelocityX(200); // Velocidad positiva para moverse a la derecha
+                this.enemy.setVelocityX(900); // Velocidad positiva para moverse a la derecha
                 this.enemy.setFlipX(false); // Enemigo mira hacia la derecha (hacia el jugador)
             } else {
                 this.enemy.setVelocityX(0); // Si está alineado con el jugador, detener movimiento horizontal
