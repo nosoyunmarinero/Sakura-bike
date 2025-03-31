@@ -79,6 +79,13 @@ class GameScene extends Phaser.Scene {
             frameRate: 10,
             repeat: 0
         });
+
+        this.anims.create({
+            key:"enemy_walk",
+            frames: this.anims.generateFrameNumbers('enemy_walk', { start: 0, end: 11 }),
+            frameRate: 1,
+            repeat: 0
+        })
     
         // Definir límites del mundo - reduced size
         this.physics.world.setBounds(0, 0, 800, 500); // Smaller bounds
@@ -113,7 +120,7 @@ class GameScene extends Phaser.Scene {
     update() {
         // CONTROLES
         // Definir velocidad de movimiento - adjusted for velocity-based movement
-        const moveSpeed = 1800; // Single value instead of multiplying later
+        const moveSpeed = 1000; // Single value instead of multiplying later
         
         // Reset velocity at the start of each update to prevent unwanted movement
         this.sakura.setVelocityX(0);
@@ -154,22 +161,23 @@ class GameScene extends Phaser.Scene {
         //Enemigo
         // Movimiento del enemigo solo cuando se presiona 's'
         if (this.keys.s.isDown) {
-            this.enemy.setVelocityX(-500);
+            if (this.enemy.x > this.sakura.x) {
+                this.enemy.setVelocityX(-200); // Velocidad negativa para moverse a la izquierda
+                this.enemy.setFlipX(true); // Enemigo mira hacia la izquierda (hacia el jugador)
+            } else if (this.enemy.x < this.sakura.x) {
+                this.enemy.setVelocityX(200); // Velocidad positiva para moverse a la derecha
+                this.enemy.setFlipX(false); // Enemigo mira hacia la derecha (hacia el jugador)
+            } else {
+                this.enemy.setVelocityX(0); // Si está alineado con el jugador, detener movimiento horizontal
+            }
+            // Reproducir animación del enemigo caminando
+            this.enemy.anims.play('enemy_walk', true);
         } else {
             // Detener al enemigo cuando no se presiona la tecla
             this.enemy.setVelocityX(0);
+            // Reproducir animación del enemigo en reposo
+            this.enemy.anims.play('enemy_dialogue', true);
         }
-        
-
-        // Hacer que el enemigo mire hacia el jugador
-        if (this.enemy.x > this.sakura.x) {
-            
-            this.enemy.setFlipX(true); // Enemigo mira hacia la izquierda (hacia el jugador)
-        } else {
-            this.enemy.setFlipX(false); // Enemigo mira hacia la derecha (hacia el jugador)
-        }
-        // Reproducir animación del enemigo       
-        this.enemy.anims.play('enemy_dialogue', true);
     }
 }
 
