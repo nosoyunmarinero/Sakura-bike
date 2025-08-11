@@ -1,0 +1,52 @@
+export default class SakuraAnims {
+    constructor(scene) {
+        this.scene = scene;
+        this.createAnimations();
+    }
+  
+    createAnimations() {
+        // Sakura animations
+        this.scene.anims.create({
+            key: 'sakura-walk',
+            frames: this.scene.anims.generateFrameNumbers('player_walk', { start: 0, end: 11 }),
+            frameRate: 17,
+            repeat: 0
+        });
+
+        this.scene.anims.create({
+            key: 'sakura-idle',
+            frames: this.scene.anims.generateFrameNumbers('player_idle', { start: 0, end: 6 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        this.scene.anims.create({
+            key: 'sakura-jump',
+            frames: this.scene.anims.generateFrameNumbers('player_jump', { start: 0, end: 1 }),
+            frameRate: 1,
+            repeat: 0
+        });
+
+        this.scene.anims.create({
+            key: 'sakura-attack',
+            frames: this.scene.anims.generateFrameNumbers('player_attack', { start: 0, end: 8 }),
+            frameRate: 14,
+            repeat: 0
+        });
+
+        // Enemy animations
+        this.scene.anims.create({
+            key: 'enemy_dialogue',
+            frames: this.scene.anims.generateFrameNumbers('enemy_dialogue', { start: 0, end: 10 }),
+            frameRate: 10,
+            repeat: 0
+        });
+
+        this.scene.anims.create({
+            key: 'enemy_walk',
+            frames: this.scene.anims.generateFrameNumbers('enemy_walk', { start: 0, end: 11 }),
+            frameRate: 10,
+            repeat: 0
+        });
+    }
+}
