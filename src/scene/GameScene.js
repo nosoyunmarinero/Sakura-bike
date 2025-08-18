@@ -49,7 +49,7 @@ class GameScene extends Phaser.Scene {
        
 
         // Definir límites del mundo - reduced size
-        this.physics.world.setBounds(0, 0, 800, 500); // Smaller bounds
+        this.physics.world.setBounds(0, 0, 1920, 641); // Smaller bounds
         this.sakura.setCollideWorldBounds(true);
         this.enemy.setCollideWorldBounds(true);
         
