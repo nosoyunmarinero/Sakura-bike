@@ -8,8 +8,8 @@ export default class SakuraAnims {
         // Sakura animations
         this.scene.anims.create({
             key: 'sakura-walk',
-            frames: this.scene.anims.generateFrameNumbers('player_walk', { start: 0, end: 11 }),
-            frameRate: 17,
+            frames: this.scene.anims.generateFrameNumbers('player_walk', { start: 0, end: 5 }),
+            frameRate: 11,
             repeat: 0
         });
 

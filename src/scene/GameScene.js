@@ -21,12 +21,12 @@ class GameScene extends Phaser.Scene {
         this.background = new background(this);
 
         // Player
-        this.sakura = this.physics.add.sprite(50, 400, 'player_walk');
+        this.sakura = this.physics.add.sprite(50, 200, 'player_walk').setScale(1.8,1.8);
         // Adjust player hitbox
-        this.sakura.body.setSize(45, 80); // Reducimos la altura de 110 a 90
-        this.sakura.body.setOffset(45, 50); // Aumentamos el offset Y de 20 a 40
+        this.sakura.body.setSize(30, 75);      // Más proporcional al frame 75x75
+        this.sakura.body.setOffset(22.5, -5); 
 
-        //Enemy
+        //Enemydad
         this.enemy = this.physics.add.sprite(700, 400, 'enemy_dialogue');
         // Adjust enemy hitbox
         this.enemy.body.setSize(45, 90); // Reducimos la altura de 110 a 90
@@ -37,7 +37,7 @@ class GameScene extends Phaser.Scene {
         
         //Sakura controller
         this.sakuraController = new SakuraController(this, this.sakura);
-         //Enemy controller
+         //Enemy controllerd
         this.enemyController = new EnemyController(this, this.enemy, this.sakura);
         
         // Animación
