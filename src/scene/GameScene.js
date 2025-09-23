@@ -21,10 +21,11 @@ class GameScene extends Phaser.Scene {
         this.background = new background(this);
 
         // Player
-        this.sakura = this.physics.add.sprite(50, 200, 'player_walk').setScale(1.8,1.8);
+        this.sakura = this.physics.add.sprite(50, 200, 'player_walk').setScale(2,2);
         // Adjust player hitbox
-        this.sakura.body.setSize(30, 75);      // Más proporcional al frame 75x75
-        this.sakura.body.setOffset(22.5, -5); 
+        this.sakura.body.setSize(25, 30);      // Más proporcional al frame 75x75
+        this.sakura.body.setOffset(10, 10); 
+        
 
         //Enemydad
         this.enemy = this.physics.add.sprite(700, 400, 'enemy_dialogue');

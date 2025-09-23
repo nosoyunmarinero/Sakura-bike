@@ -8,29 +8,36 @@ export default class SakuraAnims {
         // Sakura animations
         this.scene.anims.create({
             key: 'sakura-walk',
-            frames: this.scene.anims.generateFrameNumbers('player_walk', { start: 0, end: 5 }),
+            frames: this.scene.anims.generateFrameNumbers('player_walk', { start: 0, end: 9 }),
+            frameRate: 15,
+            repeat: 0
+        });
+
+        this.scene.anims.create({
+            key: 'sakura-run',
+            frames: this.scene.anims.generateFrameNumbers('player_run', { start: 0, end: 7 }),
             frameRate: 11,
             repeat: 0
         });
 
         this.scene.anims.create({
             key: 'sakura-idle',
-            frames: this.scene.anims.generateFrameNumbers('player_idle', { start: 0, end: 6 }),
+            frames: this.scene.anims.generateFrameNumbers('player_idle', { start: 0, end: 9 }),
             frameRate: 10,
             repeat: 0
         });
 
         this.scene.anims.create({
             key: 'sakura-jump',
-            frames: this.scene.anims.generateFrameNumbers('player_jump', { start: 0, end: 1 }),
-            frameRate: 1,
+            frames: this.scene.anims.generateFrameNumbers('player_jump', { start: 0, end: 5 }),
+            frameRate: 10,
             repeat: 0
         });
 
         this.scene.anims.create({
             key: 'sakura-attack',
             frames: this.scene.anims.generateFrameNumbers('player_attack', { start: 0, end: 8 }),
-            frameRate: 14,
+            frameRate: 15,
             repeat: 0
         });
 
