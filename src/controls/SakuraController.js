@@ -3,13 +3,22 @@ export default class SakuraController {
         this.scene = scene;
         this.sakura = sakura;
         
-        // 🔥 CONFIGURACIONES DE HITBOX POR ESTADO
+        // 🔥 CONFIGURACIONES DE HITBOX
         this.hitboxConfig = {
             normal: { width: 25, height: 30, offsetX: 10, offsetY: 10 },
-            attack: { width: 25, height: 30, offsetX: 30, offsetY: 10 } // Ajusta estos valores
+            attack: { width: 25, height: 30, offsetX: 30, offsetY: 10 }
         };
         
-        // Configurar todos los controles necesarios
+        // 🔥 CONFIGURACIONES DE POSICIÓN
+        this.positionConfig = {
+            normal: { x: 0, y: 0 },        // Posición normal
+            attack: { x: 0, y: 0 }        // ⚡ Ajusta estos valores
+        };
+        
+        // Guardar posición original
+        this.originalPosition = { x: sakura.x, y: sakura.y };
+        
+        // Configurar controles
         this.wasd = scene.input.keyboard.addKeys('W,S,A,D');
         this.keys = scene.input.keyboard.addKeys({
             j: Phaser.Input.Keyboard.KeyCodes.J,
@@ -22,14 +31,20 @@ export default class SakuraController {
         this.isJumping = false;
         
         this.setupControls();
-        this.setCurrentHitbox('normal'); // 🔥 INICIALIZAR HITBOX
+        this.setState('normal');
     }
 
-    // 🔥 MÉTODO PARA CAMBIAR HITBOX MANUALMENTE
-    setCurrentHitbox(state) {
-        const config = this.hitboxConfig[state];
-        this.sakura.body.setSize(config.width, config.height);
-        this.sakura.body.setOffset(config.offsetX, config.offsetY);
+    // 🔥 MÉTODO PARA CAMBIAR ESTADO
+    setState(state) {
+        // Aplicar hitbox
+        const hitbox = this.hitboxConfig[state];
+        this.sakura.body.setSize(hitbox.width, hitbox.height);
+        this.sakura.body.setOffset(hitbox.offsetX, hitbox.offsetY);
+        
+        // 🔥 APLICAR POSICIÓN
+        const position = this.positionConfig[state];
+        this.sakura.x = this.originalPosition.x + position.x;
+        this.sakura.y = this.originalPosition.y + position.y;
     }
 
     setupControls() {
@@ -40,14 +55,18 @@ export default class SakuraController {
     }
 
     update() {
-        // 🔥 ACTUALIZAR HITBOX BASADO EN ESTADO ACTUAL
+        // 🔥 ACTUALIZAR POSICIÓN ORIGINAL constantemente
+        this.originalPosition.x = this.sakura.x;
+        this.originalPosition.y = this.sakura.y;
+
+        // 🔥 APLICAR ESTADO ACTUAL
         if (this.isAttacking) {
-            this.setCurrentHitbox('attack');
+            this.setState('attack');
         } else {
-            this.setCurrentHitbox('normal');
+            this.setState('normal');
         }
 
-        // Movimiento horizontal - siempre permitido
+        // Movimiento horizontal
         if (this.wasd.A.isDown) {
             this.sakura.setVelocityX(-this.moveSpeed);
             this.sakura.setFlipX(true);
@@ -58,7 +77,7 @@ export default class SakuraController {
             this.sakura.setVelocityX(0);
         }
 
-        // Animaciones solo cuando no está atacando
+        // Animaciones
         if (!this.isAttacking && !this.isJumping) {
             if (this.wasd.A.isDown || this.wasd.D.isDown) {
                 this.sakura.anims.play('sakura-walk', true);
@@ -70,23 +89,23 @@ export default class SakuraController {
         // Detectar aterrizaje
         if (this.isJumping && this.sakura.body.blocked.down) {
             this.isJumping = false;
-            this.sakura.anims.stop(); // Detener animación de salto
-            // 🔥 ASEGURAR HITBOX NORMAL AL ATERRIZAR
-            this.setCurrentHitbox('normal');
+            this.sakura.anims.stop();
+            this.setState('normal');
         }
     }
 
     attack() {
+        // 🔥 GUARDAR POSICIÓN ANTES DE ATACAR
+        this.originalPosition.x = this.sakura.x;
+        this.originalPosition.y = this.sakura.y;
+        
         this.isAttacking = true;
         this.sakura.anims.play('sakura-attack', true);
-        
-        // 🔥 CAMBIAR A HITBOX DE ATAQUE
-        this.setCurrentHitbox('attack');
+        this.setState('attack');
         
         this.scene.time.delayedCall(643, () => {
             this.isAttacking = false;
-            // 🔥 VOLVER A HITBOX NORMAL
-            this.setCurrentHitbox('normal');
+            this.setState('normal');
         });
     }
 
@@ -95,9 +114,7 @@ export default class SakuraController {
             this.isJumping = true;
             this.sakura.setVelocityY(-400);
             this.sakura.anims.play('sakura-jump', true);
-            
-            // Mantener la animación de salto activa
-            this.sakura.anims.repeat = -1; // Repetir indefinidamente
+            this.sakura.anims.repeat = -1;
         }
     }
 }
