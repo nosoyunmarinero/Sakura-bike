@@ -5,8 +5,16 @@ class PreloadScene extends Phaser.Scene {
 
     preload() {
         // Background
-        this.load.image('cloud1', './assets/background/Clouds/Cloud2.png');
-        this.load.image('floor', './assets/background/Misc/Assets.png');
+        this.load.image('1', './assets/background/Layers/1.png');
+        this.load.image('2', './assets/background/Layers/2.png');   
+        this.load.image('3', './assets/background/Layers/3.png');   
+        this.load.image('4', './assets/background/Layers/4.png');   
+        this.load.image('5', './assets/background/Layers/5.png');   
+        this.load.image('6', './assets/background/Layers/6.png');   
+        this.load.image('7', './assets/background/Layers/7.png');   
+        this.load.image('8', './assets/background/Layers/8.png');   
+        
+
 
         // Player
         this.load.spritesheet('player_walk', './assets/character/example/katana-walk.png', { frameWidth: 48, frameHeight: 48 });

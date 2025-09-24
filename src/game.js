@@ -4,8 +4,8 @@ import GameScene from './scene/GameScene.js';
 
 const config = {
     type: Phaser.AUTO,
-    width: 1920,
-    height: 1080,
+    width: 960,
+    height: 540,
     backgroundColor: '#f8e1fc',
     parent: "game",
     scene: [BootScene, PreloadScene, GameScene],
