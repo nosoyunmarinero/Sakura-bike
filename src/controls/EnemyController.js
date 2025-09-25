@@ -99,7 +99,7 @@ die() {
     this.enemy.anims.play('enemy_death', true);
     
     // 🔥 DESACTIVAR ENEMIGO DESPUÉS DE LA ANIMACIÓN + TIEMPO EXTRA
-    this.scene.time.delayedCall(3000, () => { // 3 segundos total (1s animación + 2s extra)
+    this.scene.time.delayedCall(10000, () => { // 3 segundos total (1s animación + 2s extra)
         this.enemy.setActive(false);
         this.enemy.setVisible(false);
     });
