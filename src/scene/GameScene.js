@@ -101,6 +101,25 @@ class GameScene extends Phaser.Scene {
 }
 
 
+// 🔥 MÉTODO PARA MANEJAR COLISIÓN ENTRE JUGADOR Y ENEMIGO
+handleEnemyCollision(sakura, enemy) {
+    // Detener el movimiento del enemigo para que no se mueva lateralmente
+    if (enemy.body) {
+        enemy.setVelocityX(0);
+    }
+    
+    // Si el enemigo tiene un controlador, detener su lógica de movimiento
+    if (enemy.enemyController) {
+        // Puedes agregar lógica adicional aquí si es necesario
+        // Por ejemplo, hacer que el enemigo mire al jugador
+        if (enemy.x > sakura.x) {
+            enemy.setFlipX(true);
+        } else {
+            enemy.setFlipX(false);
+        }
+    }
+}
+
 // 🔥 MÉTODO PARA CREAR ENEMIGO NUEVO
 spawnEnemy() {
     // Crear enemigo en posición aleatoria
