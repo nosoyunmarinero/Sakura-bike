@@ -7,7 +7,8 @@ export default class HealthSystem {
         this.isAlive = true;
         this.isInvulnerable = false;
         this.hitCount = 0; // 🔥 Contador de golpes recibidos
-        this.hitsToDie = 3; // 🔥 Muere a los 3 golpes
+        this.hitsToDie = 10; // 🔥 Muere a los 10 golpes
+        this.hitsToDieEnemy = 3; // 🔥 Muere a los 3 golpes 
         
         // Eventos para comunicación
         this.onDamage = new Phaser.Events.EventEmitter();
@@ -20,7 +21,6 @@ export default class HealthSystem {
         
         this.hitCount++; // 🔥 Contar golpes
         this.currentHealth = this.maxHealth - (this.hitCount * (this.maxHealth / this.hitsToDie));
-        
         
         // Emitir evento de daño
         this.onDamage.emit('damage', {
@@ -49,7 +49,6 @@ export default class HealthSystem {
         this.isAlive = false;
         this.hitCount = this.hitsToDie; // Asegurar que esté en máximo
         
-        
         // Emitir evento de muerte
         this.onDeath.emit('death', {
             target: this.target,
@@ -73,7 +72,19 @@ export default class HealthSystem {
         this.isInvulnerable = false;
     }
 
-    // 🔥 MÉTODOS DE CONSULTA
+    // 🔥 MÉTODOS DE CONSULTA (AGREGADOS PARA CORREGIR EL ERROR)
+    getHealth() {
+        return this.currentHealth;
+    }
+    
+    getMaxHealth() {
+        return this.maxHealth;
+    }
+    
+    isDead() {
+        return !this.isAlive;
+    }
+    
     getHealthPercentage() {
         return (this.currentHealth / this.maxHealth) * 100;
     }

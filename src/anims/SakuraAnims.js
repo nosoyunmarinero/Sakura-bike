@@ -41,6 +41,21 @@ export default class SakuraAnims {
         repeat: 0
     });
 
+    // 🔥 NUEVAS ANIMACIONES: HURT Y DEATH
+    this.scene.anims.create({
+        key: 'sakura-hurt',
+        frames: this.scene.anims.generateFrameNumbers('player_hurt', { start: 0, end: 3 }),
+        frameRate: 12,
+        repeat: 0
+    });
+
+    this.scene.anims.create({
+        key: 'sakura-death',
+        frames: this.scene.anims.generateFrameNumbers('player_death', { start: 0, end: 7 }),
+        frameRate: 10,
+        repeat: 0
+    });
+
     // Enemy animations (opcional, si también tienen problemas)
     this.scene.anims.create({
         key: 'enemy_dialogue',

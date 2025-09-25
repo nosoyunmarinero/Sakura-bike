@@ -34,6 +34,8 @@ export default class SakuraController {
         this.moveSpeed = 350;
         this.isAttacking = false;
         this.isJumping = false;
+        this.canMove = true;
+        this.isDead = false; // 🔥 NUEVO: Estado de muerte
         
         this.setupControls();
         this.setState('normal');
@@ -52,6 +54,12 @@ export default class SakuraController {
     }
 
     update() {
+        // 🔥 SI ESTÁ MUERTO, NO HACER NADA
+        if (this.isDead) {
+            this.sakura.setVelocityX(0); // Detener movimiento
+            return;
+        }
+
         // 🔥 ACTUALIZAR EL SISTEMA DE ATAQUE CADA FRAME (IMPORTANTE!)
         this.attackSystem.update();
 
@@ -62,15 +70,18 @@ export default class SakuraController {
             this.setState('normal');
         }
 
-        // Movimiento horizontal
-        if (this.wasd.A.isDown) {
-            this.sakura.setVelocityX(-this.moveSpeed);
-            this.sakura.setFlipX(true);
-        } else if (this.wasd.D.isDown) {
-            this.sakura.setVelocityX(this.moveSpeed);
-            this.sakura.setFlipX(false);
-        } else {
-            this.sakura.setVelocityX(0);
+        // 🔥 MOVIMIENTO CONDICIONAL: Solo si puede moverse
+        if (this.canMove) {
+            // Movimiento horizontal
+            if (this.wasd.A.isDown) {
+                this.sakura.setVelocityX(-this.moveSpeed);
+                this.sakura.setFlipX(true);
+            } else if (this.wasd.D.isDown) {
+                this.sakura.setVelocityX(this.moveSpeed);
+                this.sakura.setFlipX(false);
+            } else {
+                this.sakura.setVelocityX(0);
+            }
         }
 
         // Animaciones
@@ -91,7 +102,8 @@ export default class SakuraController {
     }
 
     attack() {
-        if (this.isAttacking) {
+        // 🔥 NO ATACAR SI ESTÁ MUERTO
+        if (this.isDead || this.isAttacking) {
             return;
         }
         
@@ -99,10 +111,8 @@ export default class SakuraController {
         this.sakura.anims.play('sakura-attack', true);
         this.setState('attack');
         
-        // 🔥 DETECTAR GOLPE AL INICIAR EL ATAQUE
         const hitDetected = this.attackSystem.checkAttackHit(this.enemies);
 
-        
         this.scene.time.delayedCall(643, () => {
             this.isAttacking = false;
             this.setState('normal');
@@ -110,10 +120,27 @@ export default class SakuraController {
     }
 
     jump() {
-        if (this.sakura.body.blocked.down && !this.isJumping) {
-            this.isJumping = true;
-            this.sakura.setVelocityY(-400);
-            this.sakura.anims.play('sakura-jump', true);
+        // 🔥 NO SALTAR SI ESTÁ MUERTO
+        if (this.isDead || this.isJumping || !this.sakura.body.blocked.down) {
+            return;
+        }
+        
+        this.isJumping = true;
+        this.sakura.setVelocityY(-400);
+        this.sakura.anims.play('sakura-jump', true);
+    }
+
+    // 🔥 NUEVO: MÉTODO PARA ESTABLECER ESTADO DE MUERTE
+    setDead(isDead) {
+        this.isDead = isDead;
+        this.canMove = !isDead; // También bloquear movimiento
+        this.sakura.setVelocityX(0); // Detener movimiento inmediatamente
+        
+        if (isDead) {
+            // Detener cualquier animación actual
+            this.sakura.anims.stop();
+            // Opcionalmente reproducir animación de muerte si existe
+            // this.sakura.anims.play('sakura-death', true);
         }
     }
 
@@ -127,5 +154,13 @@ export default class SakuraController {
     // 🔥 MÉTODO PARA LIMPIAR ENEMIGOS
     clearEnemies() {
         this.enemies = [];
+    }
+
+    // 🔥 NUEVO: MÉTODO PARA CONTROLAR SI PUEDE MOVERSE
+    setCanMove(canMove) {
+        this.canMove = canMove;
+        if (!canMove) {
+            this.sakura.setVelocityX(0); // Detener movimiento inmediatamente
+        }
     }
 }

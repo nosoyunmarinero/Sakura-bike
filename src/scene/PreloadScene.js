@@ -22,12 +22,14 @@ class PreloadScene extends Phaser.Scene {
         this.load.spritesheet('player_idle', './assets/character/example/player-idle.png', { frameWidth: 48, frameHeight: 48 });
         this.load.spritesheet('player_jump', './assets/character/example/player-jump.png', { frameWidth: 48, frameHeight: 48 });
         this.load.spritesheet('player_attack', './assets/character/example/player-attack.png', { frameWidth: 80, frameHeight: 48 });
+        this.load.spritesheet('player_hurt', './assets/character/example/player-hurt.png', { frameWidth: 48, frameHeight: 48 });
+        this.load.spritesheet('player_death', './assets/character/example/player-death.png', { frameWidth: 48, frameHeight: 48 });
 
         // Enemy 
         this.load.spritesheet('enemy_idle', './assets/enemy/enemy-idle.png', { frameWidth: 96, frameHeight: 96 });
         this.load.spritesheet('enemy_walk', './assets/enemy/enemy-walk.png', { frameWidth: 96, frameHeight: 96 });
         this.load.spritesheet('enemy_death', './assets/enemy/enemy-death.png', { frameWidth: 96, frameHeight: 96 });
-        this.load.spritesheet('enemy_attack', './assets/enemy/enemy-attack.png', { frameWidth: 96, frameHeight: 96 });
+        this.load.spritesheet('enemy_attack', './assets/enemy/enemy-attack.png', { frameWidth: 128, frameHeight: 128 });
         this.load.spritesheet('enemy_hurt', './assets/enemy/enemy-hurt.png', { frameWidth: 96, frameHeight: 96 })  
     }
 
