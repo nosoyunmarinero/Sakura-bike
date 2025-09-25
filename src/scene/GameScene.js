@@ -44,15 +44,10 @@ class GameScene extends Phaser.Scene {
     this.sakura.body.setSize(25, 30);
     this.sakura.body.setOffset(10, 10);
     
-    // 🔥 SISTEMA DE SALUD DEL JUGADOR (6 golpes para morir)
-    // En el create() de GameScene.js, cambia la línea:
-    this.playerHealthSystem = new HealthSystem(this, this.sakura, 120);
+    // 🔥 SISTEMA DE SALUD DEL JUGADOR (10 golpes para morir)
     
-    // Por:
-    this.playerHealthSystem = new HealthSystem(this, this.sakura, 6); // 6 golpes para morir
+    this.playerHealthSystem = new HealthSystem(this, this.sakura, 10); // 6 golpes para morir
     
-    // Y para el enemigo, agrega después de crear el enemigo:
-    this.enemyHealthSystem = new HealthSystem(this, this.enemy, 3); // 3 golpes para morir
 
     // Configurar cámara
     this.cameras.main.startFollow(this.sakura);
@@ -74,6 +69,9 @@ class GameScene extends Phaser.Scene {
     // Controllers
     this.sakuraController = new SakuraController(this, this.sakura);
     this.enemyController = new EnemyController(this, this.enemy, this.sakura);
+
+    // 🔥 CONFIGURAR ENEMIGO PARA QUE MUERA EN 3 GOLPES
+    this.enemyController.healthSystem.hitsToDie = 3; // 🔥 3 golpes para morir
     
     // 🔥 CREAR SISTEMA DE ENEMIGOS
     this.enemySystem = new EnemySystem(this, this.sakura);

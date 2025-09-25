@@ -1,26 +1,28 @@
 import HealthSystem from '../systems/HealthSystem.js';
 
 export default class EnemyController {
-    constructor(scene, enemy, sakura) {
-        this.scene = scene;
-        this.enemy = enemy;
-        this.sakura = sakura;
-        this.isHurt = false;
-        this.isDead = false;
-        this.postDamageCooldown = 1000; // 🔥 1 segundo de cooldown después de daño
-        this.keys = scene.input.keyboard.addKeys({
-            y: Phaser.Input.Keyboard.KeyCodes.Y,
-        });
-        
-        // 🔥 SISTEMA DE SALUD
-        this.healthSystem = new HealthSystem(scene, enemy, 100);
-        
-        // 🔥 ESCUCHAR EVENTO DE MUERTE
-        this.healthSystem.onDeath.on('death', () => {
-            this.die();
-        });
-    }
-
+    constructor(scene, enemy, sakura, hitsToDie = 3) { // 🔥 AGREGAR hitsToDie COMO PARÁMETRO
+    this.scene = scene;
+    this.enemy = enemy;
+    this.sakura = sakura;
+    this.isHurt = false;
+    this.isDead = false;
+    this.postDamageCooldown = 1000;
+    this.keys = scene.input.keyboard.addKeys({
+        y: Phaser.Input.Keyboard.KeyCodes.Y,
+    });
+    
+    // 🔥 SISTEMA DE SALUD CON hitsToDie CONFIGURABLE
+    this.healthSystem = new HealthSystem(scene, enemy, 100);
+    this.healthSystem.hitsToDie = hitsToDie; // 🔥 USAR EL PARÁMETRO
+    
+    console.log(`🎯 Enemigo creado - Morirá en ${hitsToDie} golpes`); // 🔥 DEBUG
+    
+    // 🔥 ESCUCHAR EVENTO DE MUERTE
+    this.healthSystem.onDeath.on('death', () => {
+        this.die();
+    });
+}
     update() {
        // 🔥 SI ESTÁ MUERTO, NO HACER NADA
        if (this.isDead) {

@@ -52,7 +52,7 @@ export default class SakuraAnims {
     this.scene.anims.create({
         key: 'sakura-death',
         frames: this.scene.anims.generateFrameNumbers('player_death', { start: 0, end: 7 }),
-        frameRate: 10,
+        frameRate: 5,
         repeat: 0
     });
 
