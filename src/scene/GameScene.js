@@ -19,6 +19,16 @@ class GameScene extends Phaser.Scene {
     // 🔥 VARIABLE DE CONTROL DE ESTADO
     this.isPlayerDead = false;
     
+    // 🔥 SISTEMA DE SPAWNEO PROCEDURAL
+    this.enemySpawnTimer = 0;
+    this.enemySpawnInterval = 3000; // 3 segundos inicial
+    this.minSpawnInterval = 1000; // Mínimo 1 segundo
+    this.spawnIntervalDecrease = 100; // Disminuir 100ms cada vez
+    this.maxEnemies = 15; // Máximo 15 enemigos simultáneos
+    this.currentWave = 1;
+    this.enemiesSpawnedThisWave = 0;
+    this.enemiesPerWave = 5; // 5 enemigos por oleada
+    
     // Configurar gravedad
     this.physics.world.gravity.y = 800;
     
@@ -99,11 +109,6 @@ class GameScene extends Phaser.Scene {
     
     // Cambiamos overlap por collider para que no puedan atravesarse
     this.physics.add.collider(this.sakura, this.enemy, this.handleEnemyCollision, null, this);
-
-    // 🔥 TECLA R PARA RESPAWN
-    this.input.keyboard.on('keydown-R', () => {
-        this.spawnEnemy();
-    });
 
     // 🔥 BARRA DE SALUD DEL JUGADOR
     this.createHealthBar();
@@ -250,38 +255,101 @@ handleEnemyCollision(sakura, enemy) {
 }
 
 // 🔥 MÉTODO PARA CREAR ENEMIGO NUEVO
+// 🔥 MÉTODO SIMPLIFICADO PARA SPAWNEAR ENEMIGO (si lo necesitas manualmente)
 spawnEnemy() {
-    // Crear enemigo en posición aleatoria
-    const x = Phaser.Math.Between(200, 700);
-    const y = 300;
+    // Solo llama al método procedural
+    this.spawnProceduralEnemy();
+}
+spawnProceduralEnemy() {
+    // No spawnear si el jugador está muerto o hay demasiados enemigos
+    if (this.isPlayerDead || this.enemySystem.enemies.length >= this.maxEnemies) {
+        return;
+    }
     
-    const newEnemy = this.physics.add.sprite(x, y, 'enemy_idle');
+    // Calcular posición aleatoria (lejos del jugador)
+    const playerX = this.sakura.x;
+    let spawnX;
+    
+    do {
+        spawnX = Phaser.Math.Between(200, 800);
+    } while (Math.abs(spawnX - playerX) < 200); // Alejado del jugador
+    
+    const spawnY = 300; // Misma altura que el jugador
+    
+    // Crear enemigo
+    const newEnemy = this.physics.add.sprite(spawnX, spawnY, 'enemy_idle');
     newEnemy.anims.play('enemy_idle', true);
     newEnemy.body.setSize(40, 70);
     newEnemy.body.setOffset(25, 15);
     newEnemy.setCollideWorldBounds(true);
     
-    // Crear controlador para el nuevo enemigo
+    // Crear controlador y sistema de salud
     const enemyController = new EnemyController(this, newEnemy, this.sakura);
+    const enemyHealthSystem = new HealthSystem(this, newEnemy, 3); // 3 golpes para morir
+    
+    // Conectar todo
     newEnemy.enemyController = enemyController;
+    newEnemy.healthSystem = enemyHealthSystem;
     
-    // 🔥 AGREGAR AL SISTEMA DE ENEMIGOS
-    if (this.enemySystem) {
-        this.enemySystem.addEnemy(newEnemy);
-    }
-    
-    // Agregar al sistema de ataque
+    // Agregar a sistemas
+    this.enemySystem.addEnemy(newEnemy);
     this.sakuraController.addEnemy(newEnemy);
     
     // Colisiones
     this.physics.add.collider(newEnemy, this.floor);
     this.physics.add.collider(this.sakura, newEnemy, this.handleEnemyCollision, null, this);
+    
+    // Evento de muerte del enemigo
+    enemyHealthSystem.onDeath.on('death', () => {
+        this.enemySystem.removeEnemy(newEnemy);
+    });
+    
+    this.enemiesSpawnedThisWave++;
+    
+    // Verificar si completó la oleada
+    if (this.enemiesSpawnedThisWave >= this.enemiesPerWave) {
+        this.nextWave();
+    }
 }
 
-update() {
+// 🔥 MÉTODO PARA SIGUIENTE OLEADA
+nextWave() {
+    this.currentWave++;
+    this.enemiesSpawnedThisWave = 0;
+    this.enemiesPerWave += 2; // +2 enemigos por oleada
+    
+    // Disminuir intervalo de spawn (más rápido)
+    this.enemySpawnInterval = Math.max(
+        this.minSpawnInterval, 
+        this.enemySpawnInterval - this.spawnIntervalDecrease
+    );
+    
+    // Mostrar notificación de oleada
+    const waveText = this.add.text(400, 200, `OLEADA ${this.currentWave}`, {
+        fontSize: '32px',
+        fill: '#ff0000',
+        fontStyle: 'bold'
+    });
+    waveText.setOrigin(0.5);
+    waveText.setScrollFactor(0);
+    waveText.setDepth(300);
+    
+    this.time.delayedCall(2000, () => {
+        waveText.destroy();
+    });
+}
+
+update(time, delta) {
     // 🔥 NO ACTUALIZAR NADA SI EL JUGADOR ESTÁ MUERTO
     if (this.isPlayerDead) {
         return;
+    }
+    
+    // 🔥 SISTEMA DE SPAWNEO PROCEDURAL
+    this.enemySpawnTimer += delta;
+    if (this.enemySpawnTimer >= this.enemySpawnInterval) {
+        this.spawnProceduralEnemy();
+        this.enemySpawnTimer = 0;
     }
     
     // Background
@@ -290,12 +358,12 @@ update() {
     // Sakura
     this.sakuraController.update();
 
-    // 🔥 ACTUALIZAR SISTEMA DE ENEMIGOS (movimiento automático)
+    // 🔥 ACTUALIZAR SISTEMA DE ENEMIGOS
     if (this.enemySystem) {
         this.enemySystem.update();
     }
 
-    // Enemigo individual (ahora controlado por el sistema)
+    // Enemigo individual original
     this.enemyController.update();
 }
 }

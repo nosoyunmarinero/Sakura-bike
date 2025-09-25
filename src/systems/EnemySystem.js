@@ -4,9 +4,9 @@ export default class EnemySystem {
         this.player = player;
         this.enemies = [];
         this.enemySpeed = 100; // Velocidad de movimiento de los enemigos
-        this.detectionRange = 300; // Rango de detección del jugador
+        this.detectionRange = 400; // Rango de detección del jugador
         this.attackRange = 70; // 🔥 AUMENTADO: Rango de ataque (de 60 a 70)
-        this.attackCooldown = 300; // 🔥 REDUCIDO: Tiempo entre ataques (de 1000ms a 300ms)
+        this.attackCooldown = 400; // 🔥 REDUCIDO: Tiempo entre ataques (de 1000ms a 300ms)
         this.attackDamage = 20; // Daño por ataque (20 para que muera en 6 golpes)
         this.lastAttackTime = 0; // Para controlar el cooldown
     }
@@ -29,10 +29,16 @@ export default class EnemySystem {
     }
 
     // Eliminar un enemigo del sistema
+    // 🔥 MÉTODO PARA REMOVER ENEMIGO
     removeEnemy(enemy) {
         const index = this.enemies.indexOf(enemy);
         if (index > -1) {
             this.enemies.splice(index, 1);
+        }
+        
+        // Limpiar el enemigo
+        if (enemy && enemy.destroy) {
+            enemy.destroy();
         }
     }
 
