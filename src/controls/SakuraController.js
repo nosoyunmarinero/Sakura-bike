@@ -1,23 +1,28 @@
+import AttackSystem from "../systems/AttackSystem.js";
+
 export default class SakuraController {
     constructor(scene, sakura) {
         this.scene = scene;
         this.sakura = sakura;
         
-        // 🔥 CONFIGURACIONES DE HITBOX
-        this.hitboxConfig = {
-            normal: { width: 25, height: 30, offsetX: 10, offsetY: 10 },
-            attack: { width: 25, height: 30, offsetX: 30, offsetY: 10 }
-        };
+        // 🔥 CONFIGURACIONES DE HITBOX Y ORIGEN VISUAL
+        this.stateConfig = {
+            normal: { 
+                width: 25, height: 30, 
+                offsetX: 10, offsetY: 10,
+                originX: 0.5, originY: 1.0
+            },
+            attack: { 
+                width: 25, height: 30, 
+                offsetX: 30, offsetY: 18,
+                originX: 0.5, originY: 1.1
+            }
+        }; 
         
-        // 🔥 CONFIGURACIONES DE POSICIÓN
-        this.positionConfig = {
-            normal: { x: 0, y: 0 },        // Posición normal
-            attack: { x: 0, y: 0 }        // ⚡ Ajusta estos valores
-        };
-        
-        // Guardar posición original
-        this.originalPosition = { x: sakura.x, y: sakura.y };
-        
+        // 🔥 SISTEMA DE ATAQUE
+        this.attackSystem = new AttackSystem(scene, sakura);
+        this.enemies = []; // Array de enemigos (debes poblarlo después)
+
         // Configurar controles
         this.wasd = scene.input.keyboard.addKeys('W,S,A,D');
         this.keys = scene.input.keyboard.addKeys({
@@ -34,32 +39,23 @@ export default class SakuraController {
         this.setState('normal');
     }
 
-    // 🔥 MÉTODO PARA CAMBIAR ESTADO
     setState(state) {
-        // Aplicar hitbox
-        const hitbox = this.hitboxConfig[state];
-        this.sakura.body.setSize(hitbox.width, hitbox.height);
-        this.sakura.body.setOffset(hitbox.offsetX, hitbox.offsetY);
-        
-        // 🔥 APLICAR POSICIÓN
-        const position = this.positionConfig[state];
-        this.sakura.x = this.originalPosition.x + position.x;
-        this.sakura.y = this.originalPosition.y + position.y;
+        const config = this.stateConfig[state];
+        this.sakura.body.setSize(config.width, config.height);
+        this.sakura.body.setOffset(config.offsetX, config.offsetY);
+        this.sakura.setOrigin(config.originX, config.originY);
     }
 
     setupControls() {
         this.keys.j.on('down', () => this.attack());
-        this.keys.space.on('down', () => {
-            this.jump();
-        });
+        this.keys.space.on('down', () => this.jump());
     }
 
     update() {
-        // 🔥 ACTUALIZAR POSICIÓN ORIGINAL constantemente
-        this.originalPosition.x = this.sakura.x;
-        this.originalPosition.y = this.sakura.y;
+        // 🔥 ACTUALIZAR EL SISTEMA DE ATAQUE CADA FRAME (IMPORTANTE!)
+        this.attackSystem.update();
 
-        // 🔥 APLICAR ESTADO ACTUAL
+        // 🔥 APLICAR ESTADO ACTUAL CADA FRAME
         if (this.isAttacking) {
             this.setState('attack');
         } else {
@@ -95,13 +91,17 @@ export default class SakuraController {
     }
 
     attack() {
-        // 🔥 GUARDAR POSICIÓN ANTES DE ATACAR
-        this.originalPosition.x = this.sakura.x;
-        this.originalPosition.y = this.sakura.y;
+        if (this.isAttacking) {
+            return;
+        }
         
         this.isAttacking = true;
         this.sakura.anims.play('sakura-attack', true);
         this.setState('attack');
+        
+        // 🔥 DETECTAR GOLPE AL INICIAR EL ATAQUE
+        const hitDetected = this.attackSystem.checkAttackHit(this.enemies);
+
         
         this.scene.time.delayedCall(643, () => {
             this.isAttacking = false;
@@ -114,7 +114,18 @@ export default class SakuraController {
             this.isJumping = true;
             this.sakura.setVelocityY(-400);
             this.sakura.anims.play('sakura-jump', true);
-            this.sakura.anims.repeat = -1;
         }
+    }
+
+    // 🔥 MÉTODO PARA AGREGAR ENEMIGOS AL SISTEMA
+    addEnemy(enemy) {
+        if (enemy && !this.enemies.includes(enemy)) {
+            this.enemies.push(enemy);
+        }
+    }
+
+    // 🔥 MÉTODO PARA LIMPIAR ENEMIGOS
+    clearEnemies() {
+        this.enemies = [];
     }
 }
