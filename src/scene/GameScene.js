@@ -19,6 +19,7 @@ class GameScene extends Phaser.Scene {
     create() {
         // 🔥 VARIABLE DE CONTROL DE ESTADO
         this.isPlayerDead = false;
+        this.isPaused = false;
         
         // Configurar gravedad
         this.physics.world.gravity.y = 800;
@@ -103,6 +104,37 @@ class GameScene extends Phaser.Scene {
 
         // 🔥 BARRA DE SALUD DEL JUGADOR
         this.createHealthBar();
+
+        const pauseButton = this.add.text(900, 30, 'Pausa', { fontSize: '18px', fill: '#000000', backgroundColor: '#ffffff' });
+        pauseButton.setOrigin(0.5);
+        pauseButton.setScrollFactor(0);
+        pauseButton.setDepth(400);
+        pauseButton.setPadding(8, 4, 8, 4);
+        pauseButton.setInteractive({ useHandCursor: true });
+        pauseButton.on('pointerdown', () => this.togglePause());
+
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+        this.pauseOverlay = this.add.rectangle(centerX, centerY, this.cameras.main.width, this.cameras.main.height, 0x000000, 0.5);
+        this.pauseOverlay.setScrollFactor(0);
+        this.pauseOverlay.setDepth(500);
+        this.pauseOverlay.setVisible(false);
+        this.pauseOverlay.setInteractive();
+        this.pauseOverlay.on('pointerdown', () => this.togglePause());
+
+        this.pauseText = this.add.text(centerX, centerY - 20, 'PAUSA', { fontSize: '48px', fill: '#ffffff' });
+        this.pauseText.setOrigin(0.5);
+        this.pauseText.setScrollFactor(0);
+        this.pauseText.setDepth(501);
+        this.pauseText.setVisible(false);
+
+        this.resumePrompt = this.add.text(centerX, centerY + 30, 'Presiona P o clic para continuar', { fontSize: '20px', fill: '#ffffff' });
+        this.resumePrompt.setOrigin(0.5);
+        this.resumePrompt.setScrollFactor(0);
+        this.resumePrompt.setDepth(501);
+        this.resumePrompt.setVisible(false);
+
+        this.input.keyboard.on('keydown-P', () => this.togglePause());
     }
 
     // 🔥 MÉTODO PARA CREAR BARRA DE SALUD
@@ -117,7 +149,11 @@ class GameScene extends Phaser.Scene {
         this.healthBar.setDepth(101);
         
         // Texto de salud
-        this.healthText = this.add.text(100, 80, 'HP: 120/120', {
+        const initCurrent = this.playerHealthSystem.getHealth();
+        const initMax = this.playerHealthSystem.getMaxHealth();
+        const initPct = initCurrent / initMax;
+        this.healthBar.width = 200 * initPct;
+        this.healthText = this.add.text(100, 80, `HP: ${initCurrent}/${initMax}`, {
             fontSize: '16px',
             fill: '#ffffff'
         });
@@ -239,9 +275,41 @@ class GameScene extends Phaser.Scene {
         }
     }
 
+    togglePause() {
+        if (this.isPlayerDead) {
+            return;
+        }
+        this.isPaused = !this.isPaused;
+        if (this.isPaused) {
+            this.physics.pause();
+            if (this.sakura && this.sakura.anims) this.sakura.anims.pause();
+            if (this.enemy && this.enemy.anims) this.enemy.anims.pause();
+            if (this.enemySystem && this.enemySystem.enemies) {
+                this.enemySystem.enemies.forEach(e => {
+                    if (e && e.anims) e.anims.pause();
+                });
+            }
+            this.pauseOverlay.setVisible(true);
+            this.pauseText.setVisible(true);
+            this.resumePrompt.setVisible(true);
+        } else {
+            this.physics.resume();
+            if (this.sakura && this.sakura.anims) this.sakura.anims.resume();
+            if (this.enemy && this.enemy.anims) this.enemy.anims.resume();
+            if (this.enemySystem && this.enemySystem.enemies) {
+                this.enemySystem.enemies.forEach(e => {
+                    if (e && e.anims) e.anims.resume();
+                });
+            }
+            this.pauseOverlay.setVisible(false);
+            this.pauseText.setVisible(false);
+            this.resumePrompt.setVisible(false);
+        }
+    }
+
     update(time, delta) {
         // 🔥 NO ACTUALIZAR NADA SI EL JUGADOR ESTÁ MUERTO
-        if (this.isPlayerDead) {
+        if (this.isPlayerDead || this.isPaused) {
             return;
         }
         

@@ -86,10 +86,13 @@ export default class EnemyController {
         
         this.enemy.anims.play('enemy_death', true);
         
-        // 🔥 DESACTIVAR ENEMIGO DESPUÉS DE LA ANIMACIÓN + TIEMPO EXTRA
-        this.scene.time.delayedCall(10000, () => { // 3 segundos total (1s animación + 2s extra)
-            this.enemy.setActive(false);
-            this.enemy.setVisible(false);
+        // 🔥 REMOVER DEL SISTEMA DESPUÉS DE LA ANIMACIÓN
+        this.scene.time.delayedCall(1500, () => {
+            if (this.scene.enemySystem) {
+                this.scene.enemySystem.removeEnemy(this.enemy);
+            } else {
+                this.enemy.destroy();
+            }
         });
     }
 }

@@ -44,6 +44,8 @@ export default class EnemySystem {
 
     // Actualizar todos los enemigos
     update() {
+        // 🔥 LIMPIEZA: remover referencias a enemigos inactivos o muertos
+        this.enemies = this.enemies.filter(enemy => enemy && enemy.active && enemy.enemyController && !enemy.enemyController.isDead);
         this.enemies.forEach(enemy => {
             if (enemy && enemy.active && enemy.enemyController && !enemy.enemyController.isDead) {
                 this.updateEnemyBehavior(enemy);
@@ -64,17 +66,10 @@ export default class EnemySystem {
             return;
         }
 
-        // Si el jugador está en rango de ataque
         if (distanceToPlayer <= this.attackRange) {
             this.attackPlayer(enemy);
-        }
-        // Si el jugador está en rango de detección
-        else if (distanceToPlayer <= this.detectionRange) {
+        } else {
             this.followPlayer(enemy);
-        }
-        // Si el jugador está fuera de rango, el enemigo se queda quieto
-        else {
-            this.idleEnemy(enemy);
         }
     }
 
