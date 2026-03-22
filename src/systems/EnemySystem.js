@@ -162,13 +162,34 @@ export default class EnemySystem {
 
     // 🔥 NUEVO: Aplicar daño al jugador
     damagePlayer() {
-        // Verificar si el GameScene tiene el método handlePlayerDamage
+        const controller = this.scene.sakuraController;
+        const now = this.scene.time.now;
+        if (controller && controller.parryActive) {
+            const delta = now - controller.parryStartTime;
+            if (this.scene.playerHealthSystem && typeof this.scene.playerHealthSystem.heal === 'function') {
+                const healAmount = delta <= controller.parryPerfectMs ? 8 : 8;
+                this.scene.playerHealthSystem.heal(healAmount);
+                if (delta <= controller.parryPerfectMs) {
+                    this.knockbackEnemiesAround();
+                }
+                if (this.scene.updateHealthBar) {
+                    this.scene.updateHealthBar();
+                }
+            }
+            return;
+        }
         if (this.scene.handlePlayerDamage && typeof this.scene.handlePlayerDamage === 'function') {
             this.scene.handlePlayerDamage(this.attackDamage);
-            console.log(`¡El enemigo ha golpeado al jugador por ${this.attackDamage} de daño!`);
-        } else {
-            console.log('¡El enemigo ha golpeado al jugador!');
         }
+    }
+
+    knockbackEnemiesAround() {
+        this.enemies.forEach(enemy => {
+            if (enemy && enemy.body) {
+                const dir = enemy.x < this.player.x ? -1 : 1;
+                enemy.setVelocityX(dir * -200);
+            }
+        });
     }
 
     // Enemigo en estado idle (quieto)

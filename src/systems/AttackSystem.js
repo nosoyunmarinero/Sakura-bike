@@ -66,6 +66,24 @@ export default class AttackSystem {
     return hitDetected;
 }
 
+    spawnFinisherAoE(enemies) {
+        const radius = 65;
+        const aoeZone = this.scene.add.zone(this.player.x, this.player.y, radius * 2, radius * 2);
+        this.scene.physics.add.existing(aoeZone);
+        aoeZone.body.setAllowGravity(false);
+        enemies.forEach(enemy => {
+            if (enemy && enemy.body) {
+                const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+                if (dist <= radius) {
+                    if (enemy.enemyController) {
+                        enemy.enemyController.takeDamage();
+                    }
+                }
+            }
+        });
+        this.scene.time.delayedCall(100, () => aoeZone.destroy());
+    }
+
     // 🔥 NUEVO MÉTODO: Destruir el detector cuando ya no se necesite
     destroy() {
         if (this.detector) {

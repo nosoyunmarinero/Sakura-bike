@@ -36,7 +36,9 @@ export default class WaveSystem {
     // 🔥 SPAWNEO PROCEDURAL DE ENEMIGOS
     spawnProceduralEnemy() {
         // No spawnear si el jugador está muerto o hay demasiados enemigos
-        if (this.scene.isPlayerDead || this.enemySystem.enemies.length >= this.maxEnemies) {
+        const elapsedMs = this.scene.time.now;
+        const dynamicMax = 8 + Math.min(6, Math.floor(elapsedMs / 120000)); // +1 cada 2 min, máx 14
+        if (this.scene.isPlayerDead || this.enemySystem.enemies.length >= dynamicMax) {
             return;
         }
 
@@ -67,10 +69,7 @@ export default class WaveSystem {
         this.scene.physics.add.collider(newEnemy, this.scene.floor);
         this.scene.physics.add.collider(this.sakura, newEnemy, this.scene.handleEnemyCollision, null, this.scene);
         
-        // Evento de muerte del enemigo
-        enemyHealthSystem.onDeath.on('death', () => {
-            this.enemySystem.removeEnemy(newEnemy);
-        });
+        // Manejo de muerte desde EnemyController
         
         this.enemiesSpawnedThisWave++;
         

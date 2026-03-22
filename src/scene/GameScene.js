@@ -20,6 +20,7 @@ class GameScene extends Phaser.Scene {
         // 🔥 VARIABLE DE CONTROL DE ESTADO
         this.isPlayerDead = false;
         this.isPaused = false;
+        this.isStoreOpen = false;
         
         // Configurar gravedad
         this.physics.world.gravity.y = 800;
@@ -104,6 +105,12 @@ class GameScene extends Phaser.Scene {
 
         // 🔥 BARRA DE SALUD DEL JUGADOR
         this.createHealthBar();
+        this.flowers = 0;
+        this.coins = 0;
+        this.noFlowerDeaths = 0;
+        this.createResourceHUD();
+        this.pickupsGroup = this.physics.add.group({ allowGravity: false, immovable: true });
+        this.physics.add.overlap(this.sakura, this.pickupsGroup, this.handlePickupOverlap, null, this);
 
         const pauseButton = this.add.text(900, 30, 'Pausa', { fontSize: '18px', fill: '#000000', backgroundColor: '#ffffff' });
         pauseButton.setOrigin(0.5);
@@ -135,6 +142,7 @@ class GameScene extends Phaser.Scene {
         this.resumePrompt.setVisible(false);
 
         this.input.keyboard.on('keydown-P', () => this.togglePause());
+        this.input.keyboard.on('keydown-B', () => this.toggleStore());
     }
 
     // 🔥 MÉTODO PARA CREAR BARRA DE SALUD
@@ -171,6 +179,135 @@ class GameScene extends Phaser.Scene {
         this.healthText.setText(`HP: ${currentHealth}/${maxHealth}`);
     }
 
+    createResourceHUD() {
+        const rightX = this.cameras.main.width - 24;
+        this.comboText = this.add.text(rightX, 60, `Combo: 0 x1`, { fontSize: '16px', fill: '#ffffff' });
+        this.comboText.setOrigin(1, 0);
+        this.comboText.setScrollFactor(0);
+        this.comboText.setDepth(150);
+        this.flowersText = this.add.text(rightX, 80, `Flores: ${this.flowers}`, { fontSize: '16px', fill: '#ffffff' });
+        this.flowersText.setOrigin(1, 0);
+        this.flowersText.setScrollFactor(0);
+        this.flowersText.setDepth(150);
+        this.coinsText = this.add.text(rightX, 100, `Monedas: ${this.coins}`, { fontSize: '16px', fill: '#ffffff' });
+        this.coinsText.setOrigin(1, 0);
+        this.coinsText.setScrollFactor(0);
+        this.coinsText.setDepth(150);
+    }
+
+    collectResource(type, amount = 1) {
+        if (type === 'flower') {
+            this.flowers += amount;
+            this.flowersText.setText(`Flores: ${this.flowers}`);
+        } else if (type === 'coin') {
+            this.coins += amount;
+            this.coinsText.setText(`Monedas: ${this.coins}`);
+        }
+    }
+
+    updateComboUI(count, mult) {
+        if (this.comboText) {
+            this.comboText.setText(`Combo: ${count} x${mult}`);
+        }
+    }
+
+    onEnemyDeath(enemy) {
+        const guaranteeFlower = this.noFlowerDeaths >= 10;
+        if (guaranteeFlower || Math.random() < 0.6) {
+            this.spawnPickup('flower', enemy.x, enemy.y);
+            this.noFlowerDeaths = 0;
+        } else {
+            this.noFlowerDeaths++;
+        }
+        if (Math.random() < 0.3) {
+            this.spawnPickup('coin', enemy.x, enemy.y);
+        }
+    }
+
+    spawnPickup(type, x, y) {
+        const size = 16;
+        const zone = this.add.zone(x, y, size, size);
+        this.physics.add.existing(zone);
+        zone.body.setAllowGravity(false);
+        zone.body.setImmovable(true);
+        zone.pickupType = type;
+        const color = type === 'flower' ? 0xff66cc : 0xffd700;
+        const rect = this.add.rectangle(x, y, size, size, color);
+        rect.setDepth(140);
+        zone.visual = rect;
+        this.pickupsGroup.add(zone);
+        this.time.delayedCall(15000, () => {
+            if (zone.active) {
+                this.pickupsGroup.remove(zone, true, true);
+            }
+            if (rect && rect.active) rect.destroy();
+        });
+    }
+
+    handlePickupOverlap(player, zone) {
+        const type = zone.pickupType;
+        if (!type) return;
+        this.collectResource(type, 1);
+        if (zone.visual) zone.visual.destroy();
+        this.pickupsGroup.remove(zone, true, true);
+    }
+
+    toggleStore() {
+        if (this.isPlayerDead) return;
+        if (this.isStoreOpen) {
+            this.closeStore();
+            return;
+        }
+        const nearEnemy = this.enemySystem.enemies.some(e => Phaser.Math.Distance.Between(e.x, e.y, this.sakura.x, this.sakura.y) < 120);
+        if (nearEnemy) {
+            const warn = this.add.text(480, 100, 'No puedes abrir la tienda en combate', { fontSize: '18px', fill: '#ff6666' });
+            warn.setOrigin(0.5);
+            warn.setScrollFactor(0);
+            warn.setDepth(600);
+            this.time.delayedCall(1200, () => warn.destroy());
+            return;
+        }
+        this.openStore();
+    }
+
+    openStore() {
+        this.isStoreOpen = true;
+        this.physics.pause();
+        if (this.sakura && this.sakura.anims) this.sakura.anims.pause();
+        if (this.enemySystem && this.enemySystem.enemies) {
+            this.enemySystem.enemies.forEach(e => e.anims && e.anims.pause());
+        }
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+        this.storeOverlay = this.add.rectangle(centerX, centerY, this.cameras.main.width, this.cameras.main.height, 0x000000, 0.7);
+        this.storeOverlay.setScrollFactor(0);
+        this.storeOverlay.setDepth(700);
+        this.storeOverlay.setInteractive();
+        this.storeOverlay.on('pointerdown', () => this.closeStore());
+        const lines = [
+            'Tienda de Cartas',
+            'Común: 6 flores',
+            'Rara: 10 flores',
+            'Épica: 16 flores',
+            'Re-roll: 3 monedas',
+            'Pulsa B o clic para cerrar'
+        ];
+        this.storeText = this.add.text(centerX, centerY, lines.join('\n'), { fontSize: '20px', fill: '#ffffff', align: 'center' });
+        this.storeText.setOrigin(0.5);
+        this.storeText.setScrollFactor(0);
+        this.storeText.setDepth(701);
+    }
+
+    closeStore() {
+        this.isStoreOpen = false;
+        this.physics.resume();
+        if (this.sakura && this.sakura.anims) this.sakura.anims.resume();
+        if (this.enemySystem && this.enemySystem.enemies) {
+            this.enemySystem.enemies.forEach(e => e.anims && e.anims.resume());
+        }
+        if (this.storeOverlay) this.storeOverlay.destroy();
+        if (this.storeText) this.storeText.destroy();
+    }
     // 🔥 MÉTODO PARA MANEJAR DAÑO AL JUGADOR
     handlePlayerDamage(amount) {
         // 🔥 NO APLICAR DAÑO SI YA ESTÁ MUERTO
@@ -180,6 +317,9 @@ class GameScene extends Phaser.Scene {
         
         this.playerHealthSystem.takeDamage(amount);
         this.updateHealthBar();
+        if (this.sakuraController && this.sakuraController.resetCombo) {
+            this.sakuraController.resetCombo();
+        }
         
         // 🔥 REPRODUCIR ANIMACIÓN DE HURT CON MÁS CONTROL
         if (this.sakura && this.sakura.anims && !this.isPlayerDead) {
@@ -309,7 +449,7 @@ class GameScene extends Phaser.Scene {
 
     update(time, delta) {
         // 🔥 NO ACTUALIZAR NADA SI EL JUGADOR ESTÁ MUERTO
-        if (this.isPlayerDead || this.isPaused) {
+        if (this.isPlayerDead || this.isPaused || this.isStoreOpen) {
             return;
         }
         

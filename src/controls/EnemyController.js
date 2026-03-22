@@ -85,8 +85,9 @@ export default class EnemyController {
         }
         
         this.enemy.anims.play('enemy_death', true);
-        
-        // 🔥 REMOVER DEL SISTEMA DESPUÉS DE LA ANIMACIÓN
+        if (this.scene.onEnemyDeath) {
+            this.scene.onEnemyDeath(this.enemy);
+        }
         this.scene.time.delayedCall(1500, () => {
             if (this.scene.enemySystem) {
                 this.scene.enemySystem.removeEnemy(this.enemy);

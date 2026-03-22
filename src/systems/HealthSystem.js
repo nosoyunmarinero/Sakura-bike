@@ -64,6 +64,17 @@ export default class HealthSystem {
         });
     }
 
+    // 🔥 CURACIÓN
+    heal(amount = 1) {
+        if (!this.isAlive) return;
+        this.currentHealth = Math.min(this.maxHealth, this.currentHealth + amount);
+        if (this.hitCount > 0) {
+            const perHit = this.maxHealth / this.hitsToDie;
+            const healedHits = Math.floor(amount / perHit);
+            this.hitCount = Math.max(0, this.hitCount - healedHits);
+        }
+    }
+
     // 🔥 REINICIAR VIDA
     reset() {
         this.currentHealth = this.maxHealth;

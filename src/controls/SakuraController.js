@@ -28,14 +28,25 @@ export default class SakuraController {
         this.keys = scene.input.keyboard.addKeys({
             j: Phaser.Input.Keyboard.KeyCodes.J,
             k: Phaser.Input.Keyboard.KeyCodes.K,
+            shift: Phaser.Input.Keyboard.KeyCodes.SHIFT,
             space: Phaser.Input.Keyboard.KeyCodes.SPACE,
         });
         
         this.moveSpeed = 350;
         this.isAttacking = false;
         this.isJumping = false;
+        this.isDashing = false;
         this.canMove = true;
         this.isDead = false; // 🔥 NUEVO: Estado de muerte
+        this.comboCount = 0;
+        this.comboMultiplier = 1;
+        this.chainHits = 0;
+        this.parryActive = false;
+        this.parryStartTime = 0;
+        this.parryWindowMs = 250;
+        this.parryPerfectMs = 80;
+        this.parryCooldownMs = 800;
+        this.lastParryTime = 0;
         
         this.setupControls();
         this.setState('normal');
@@ -50,6 +61,8 @@ export default class SakuraController {
 
     setupControls() {
         this.keys.j.on('down', () => this.attack());
+        this.keys.k.on('down', () => this.parry());
+        this.keys.shift.on('down', () => this.dash());
         this.keys.space.on('down', () => this.jump());
     }
 
@@ -71,7 +84,7 @@ export default class SakuraController {
         }
 
         // 🔥 MOVIMIENTO CONDICIONAL: Solo si puede moverse
-        if (this.canMove) {
+        if (this.canMove && !this.isDashing) {
             // Movimiento horizontal
             if (this.wasd.A.isDown) {
                 this.sakura.setVelocityX(-this.moveSpeed);
@@ -85,7 +98,9 @@ export default class SakuraController {
         }
 
         // Animaciones
-        if (!this.isAttacking && !this.isJumping) {
+        if (this.isDashing) {
+            this.sakura.anims.play('sakura-walk', true);
+        } else if (!this.isAttacking && !this.isJumping) {
             if (this.wasd.A.isDown || this.wasd.D.isDown) {
                 this.sakura.anims.play('sakura-walk', true);
             } else {
@@ -112,8 +127,11 @@ export default class SakuraController {
         this.setState('attack');
         
         const hitDetected = this.attackSystem.checkAttackHit(this.enemies);
+        if (hitDetected) {
+            this.registerHit();
+        }
 
-        this.scene.time.delayedCall(643, () => {
+        this.scene.time.delayedCall(380, () => {
             this.isAttacking = false;
             this.setState('normal');
         });
@@ -128,6 +146,57 @@ export default class SakuraController {
         this.isJumping = true;
         this.sakura.setVelocityY(-400);
         this.sakura.anims.play('sakura-jump', true);
+    }
+
+    parry() {
+        if (this.isDead) return;
+        const now = this.scene.time.now;
+        if (now - this.lastParryTime < this.parryCooldownMs) return;
+        this.lastParryTime = now;
+        this.parryActive = true;
+        this.parryStartTime = this.scene.time.now;
+        this.sakura.anims.play('sakura-idle', true);
+        this.sakura.setTint(0x99ccff);
+        this.scene.time.delayedCall(this.parryWindowMs, () => {
+            this.parryActive = false;
+            this.sakura.clearTint();
+        });
+    }
+
+    dash() {
+        if (this.isDead || this.isDashing || !this.canMove) return;
+        this.isDashing = true;
+        const direction = this.sakura.flipX ? -1 : 1;
+        this.sakura.setVelocityX(direction * 600);
+        if (this.scene.playerHealthSystem) {
+            this.scene.playerHealthSystem.setInvulnerable(250);
+        }
+        this.scene.time.delayedCall(250, () => {
+            this.isDashing = false;
+        });
+    }
+
+    registerHit() {
+        this.comboCount++;
+        this.chainHits++;
+        if (this.comboCount % 5 === 0) {
+            this.comboMultiplier = Math.min(3, this.comboMultiplier + 1);
+        }
+        if (this.chainHits % 3 === 0) {
+            this.attackSystem.spawnFinisherAoE(this.enemies);
+        }
+        if (this.scene.updateComboUI) {
+            this.scene.updateComboUI(this.comboCount, this.comboMultiplier);
+        }
+    }
+
+    resetCombo() {
+        this.comboCount = 0;
+        this.comboMultiplier = 1;
+        this.chainHits = 0;
+        if (this.scene.updateComboUI) {
+            this.scene.updateComboUI(this.comboCount, this.comboMultiplier);
+        }
     }
 
     // 🔥 NUEVO: MÉTODO PARA ESTABLECER ESTADO DE MUERTE
