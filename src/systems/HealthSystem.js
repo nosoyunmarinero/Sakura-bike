@@ -48,6 +48,7 @@ export default class HealthSystem {
         
         this.isAlive = false;
         this.hitCount = this.hitsToDie; // Asegurar que esté en máximo
+        this.currentHealth = 0;
         
         // Emitir evento de muerte
         this.onDeath.emit('death', {

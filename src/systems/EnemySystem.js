@@ -70,13 +70,18 @@ export default class EnemySystem {
                 if (enemy.hpBarBg && enemy.hpBar && enemy.healthSystem) {
                     const max = enemy.healthSystem.getMaxHealth ? enemy.healthSystem.getMaxHealth() : enemy.healthSystem.maxHealth;
                     const cur = enemy.healthSystem.getHealth ? enemy.healthSystem.getHealth() : enemy.healthSystem.currentHealth;
-                    const pct = Phaser.Math.Clamp(cur / max, 0, 1);
+                    let pct = 0;
+                    if (max > 0) {
+                        pct = cur / max;
+                    }
+                    if (pct < 0.001) pct = 0; // evitar “sobras” por flotantes
+                    pct = Phaser.Math.Clamp(pct, 0, 1);
                     const barWidth = 50;
                     enemy.hpBarBg.x = enemy.x;
                     enemy.hpBarBg.y = enemy.y - 45;
-                    enemy.hpBar.x = enemy.x - (barWidth / 2) + (barWidth * pct) / 2;
                     enemy.hpBar.y = enemy.y - 45;
                     enemy.hpBar.width = barWidth * pct;
+                    enemy.hpBar.x = enemy.x - (barWidth / 2) + enemy.hpBar.width / 2;
                 }
             }
         });

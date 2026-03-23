@@ -76,6 +76,7 @@ class GameScene extends Phaser.Scene {
 
         // 🔥 CONFIGURAR ENEMIGO PARA QUE MUERA EN 3 GOLPES
         this.enemyController.healthSystem.hitsToDie = 3;
+        this.enemy.healthSystem = this.enemyController.healthSystem;
         
         // 🔥 CREAR SISTEMA DE ENEMIGOS
         this.enemySystem = new EnemySystem(this, this.sakura);
@@ -161,6 +162,7 @@ class GameScene extends Phaser.Scene {
             } else if (document.documentElement.requestFullscreen) {
                 document.documentElement.requestFullscreen();
             }
+            this.applyFullscreenCanvasScale();
         });
 
         const centerX = this.cameras.main.width / 2;
@@ -187,6 +189,20 @@ class GameScene extends Phaser.Scene {
         this.input.keyboard.on('keydown-P', () => this.togglePause());
         this.input.keyboard.on('keydown-B', () => this.toggleStore());
         this.setupMobileUI();
+        const refreshScale = () => {
+            if (document.fullscreenElement || document.webkitFullscreenElement) {
+                this.applyFullscreenCanvasScale();
+            } else {
+                const canvas = this.game && this.game.canvas;
+                if (canvas) {
+                    canvas.style.transform = 'none';
+                    canvas.style.transformOrigin = 'center center';
+                }
+            }
+            this.scale && this.scale.refresh && this.scale.refresh();
+        };
+        document.addEventListener('fullscreenchange', refreshScale);
+        document.addEventListener('webkitfullscreenchange', refreshScale);
     }
 
     // 🔥 MÉTODO PARA CREAR BARRA DE SALUD
@@ -775,6 +791,18 @@ class GameScene extends Phaser.Scene {
         this.enemyController.update();
 
         this.updateMobileUI();
+    }
+
+    applyFullscreenCanvasScale() {
+        const canvas = this.game && this.game.canvas;
+        if (!canvas) return;
+        const baseW = 960;
+        const baseH = 540;
+        const scaleX = window.innerWidth / baseW;
+        const scaleY = window.innerHeight / baseH;
+        const zoom = Math.min(scaleX, scaleY);
+        canvas.style.transform = `scale(${zoom})`;
+        canvas.style.transformOrigin = 'center center';
     }
 
     setupMobileUI() {

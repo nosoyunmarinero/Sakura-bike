@@ -68,14 +68,14 @@ export default class WaveSystem {
         newEnemy.setCollideWorldBounds(true);
         newEnemy.enemyData = { type: chosen.type, attackDamage: chosen.dmg, speed: chosen.speed, attackType: chosen.attackType };
         
-        // Crear controlador y sistema de salud
-        const enemyController = new EnemyController(this.scene, newEnemy, this.sakura);
+        // Crear sistema de salud y controlador unificados
         const enemyHealthSystem = new HealthSystem(this.scene, newEnemy, chosen.hp);
-        enemyHealthSystem.hitsToDie = chosen.hp;
+        enemyHealthSystem.hitsToDie = this.enemyHitsToDie;
+        const enemyController = new EnemyController(this.scene, newEnemy, this.sakura, this.enemyHitsToDie, enemyHealthSystem);
         
         // Conectar todo
         newEnemy.enemyController = enemyController;
-        newEnemy.healthSystem = enemyHealthSystem;
+        newEnemy.healthSystem = enemyController.healthSystem;
         
         // Agregar a sistemas
         this.enemySystem.addEnemy(newEnemy);

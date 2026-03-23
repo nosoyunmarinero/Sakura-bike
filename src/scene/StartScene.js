@@ -17,6 +17,26 @@ class StartScene extends Phaser.Scene {
         });
         title.setOrigin(0.5);
         title.setScrollFactor(0);
+        const fsBtn = this.add.text(this.cameras.main.width - 80, 30, 'Fullscreen', { fontSize: '14px', fill: '#ffffff', backgroundColor: '#333333' });
+        fsBtn.setOrigin(0.5);
+        fsBtn.setScrollFactor(0);
+        fsBtn.setDepth(10);
+        fsBtn.setPadding(6, 4, 6, 4);
+        fsBtn.setInteractive({ useHandCursor: true });
+        fsBtn.on('pointerdown', () => {
+            if (this.scale && this.scale.startFullscreen) {
+                this.scale.startFullscreen();
+            } else if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            }
+        });
+        this.input.keyboard.on('keydown-F', () => {
+            if (this.scale && this.scale.startFullscreen) {
+                this.scale.startFullscreen();
+            } else if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            }
+        });
 
         const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         const promptText = isMobile ? 'Toca JUGAR' : 'Presiona SPACE para iniciar';

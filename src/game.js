@@ -9,6 +9,9 @@ const config = {
     height: 540,
     backgroundColor: '#f8e1fc',
     parent: "game",
+    scale: {
+        mode: Phaser.Scale.NONE
+    },
     scene: [BootScene, PreloadScene, StartScene, GameScene],
     physics: {
         default: 'arcade',

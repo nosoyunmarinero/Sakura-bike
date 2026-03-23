@@ -1,7 +1,7 @@
 import HealthSystem from '../systems/HealthSystem.js';
 
 export default class EnemyController {
-    constructor(scene, enemy, sakura, hitsToDie = 3) { // 🔥 AGREGAR hitsToDie COMO PARÁMETRO
+    constructor(scene, enemy, sakura, hitsToDie = 3, healthSystem = null) {
     this.scene = scene;
     this.enemy = enemy;
     this.sakura = sakura;
@@ -12,9 +12,11 @@ export default class EnemyController {
         y: Phaser.Input.Keyboard.KeyCodes.Y,
     });
     
-    // 🔥 SISTEMA DE SALUD CON hitsToDie CONFIGURABLE
-    this.healthSystem = new HealthSystem(scene, enemy, 100);
-    this.healthSystem.hitsToDie = hitsToDie; // 🔥 USAR EL PARÁMETRO
+    // 🔥 SISTEMA DE SALUD: permitir inyectar instancia externa
+    this.healthSystem = healthSystem ? healthSystem : new HealthSystem(scene, enemy, 100);
+    if (hitsToDie !== undefined && hitsToDie !== null) {
+        this.healthSystem.hitsToDie = hitsToDie;
+    }
     
     console.log(`🎯 Enemigo creado - Morirá en ${hitsToDie} golpes`); // 🔥 DEBUG
     
@@ -82,6 +84,14 @@ export default class EnemyController {
         // 🔥 OCULTAR DEBUG DEL ENEMIGO
         if (this.enemy.body.debugShowBody) {
             this.enemy.body.debugShowBody = false;
+        }
+        
+        if (this.enemy.hpBar) {
+            this.enemy.hpBar.width = 0;
+            this.enemy.hpBar.x = this.enemy.x - 25;
+        }
+        if (this.enemy.hpBarBg) {
+            this.enemy.hpBarBg.x = this.enemy.x;
         }
         
         this.enemy.anims.play('enemy_death', true);
