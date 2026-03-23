@@ -3,6 +3,13 @@ import PreloadScene from './scene/PreloadScene.js';
 import GameScene from './scene/GameScene.js';
 import StartScene from './scene/StartScene.js';
 
+// Patch del bug interno de Phaser: el GamepadPlugin llama removeAllListeners
+// sobre un objeto que ya fue destruido durante el shutdown de la escena.
+const _originalStopListeners = Phaser.Input.Gamepad.GamepadPlugin.prototype.stopListeners;
+Phaser.Input.Gamepad.GamepadPlugin.prototype.stopListeners = function () {
+    try { _originalStopListeners.call(this); } catch (e) {}
+};
+
 const config = {
     type: Phaser.AUTO,
     width: 960,
@@ -19,6 +26,9 @@ const config = {
             gravity: { y: 600 },
             debug: false
         }
+    },
+    input: {
+        gamepad: true
     }
 };
 

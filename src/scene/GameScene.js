@@ -1,12 +1,13 @@
 import SakuraController from '../controls/SakuraController.js';
 import EnemyController from '../controls/EnemyController.js';
 import EnemySystem from '../systems/EnemySystem.js';
-import WaveSystem from '../systems/WaveSystem.js'; // 🔥 NUEVO IMPORT
+import WaveSystem from '../systems/WaveSystem.js'; 
 import SakuraAnims from '../anims/SakuraAnims.js';
 import EnemyAnims from '../anims/EnemyAnims.js';
 import BackgroundManager from '../background/brackgroundManager.js';
 import HealthSystem from '../systems/HealthSystem.js';
 import CardStore from '../systems/CardStore.js';
+import GamepadSystem from '../controls/GamepadSystem.js';
 
 class GameScene extends Phaser.Scene {
     constructor() {
@@ -18,16 +19,13 @@ class GameScene extends Phaser.Scene {
     }
 
     create() {
-        // 🔥 VARIABLE DE CONTROL DE ESTADO
         this.isPlayerDead = false;
         this.isPaused = false;
         this.isStoreOpen = false;
         this.isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         
-        // Configurar gravedad
         this.physics.world.gravity.y = 800;
         
-        // Background
         const layersConfig = [
             { key: '1', speed: 0.1 },
             { key: '2', speed: 0.2 },
@@ -39,75 +37,54 @@ class GameScene extends Phaser.Scene {
             { key: '8', speed: 1.0 }
         ];
 
-        // Crear el manager de background
         this.backgroundManager = new BackgroundManager(this, layersConfig);
 
-        // Player - posicionado más abajo, cerca del suelo
         this.sakura = this.physics.add.sprite(100, 300, 'player_walk').setScale(2,2);
-        
-        // Hitbox
         this.sakura.body.setSize(25, 30);
         this.sakura.body.setOffset(10, 10);
         
-        // 🔥 SISTEMA DE SALUD DEL JUGADOR (100 HP)
         this.playerHealthSystem = new HealthSystem(this, this.sakura, 100);
 
-        // Configurar cámara
         this.cameras.main.startFollow(this.sakura);
         this.cameras.main.setLerp(0.1, 0.1);
-        
-        // Configurar los límites de la cámara
         this.cameras.main.setBounds(-5000, 0, 10000, 540);
 
-        // Enemy - posicionado a la misma altura que el personaje
         this.enemy = this.physics.add.sprite(500, 300, 'enemy_idle');
         this.enemy.anims.play('enemy_idle', true);
         this.enemy.body.setSize(40, 70);
         this.enemy.body.setOffset(25, 15);
         this.enemy.enemyData = { type: 'Skeleton', attackDamage: 10, speed: 100, attackType: 'melee' };
         
-        // 🔥 CREAR EL SUELO PRIMERO
         this.floor = this.physics.add.staticGroup();
         this.floor.create(480, 540, null).setSize(10000, 20).setVisible(false);
 
-        // Controllers
         this.sakuraController = new SakuraController(this, this.sakura);
         this.enemyController = new EnemyController(this, this.enemy, this.sakura);
 
-        // 🔥 CONFIGURAR ENEMIGO PARA QUE MUERA EN 3 GOLPES
+        this.gamepadSystem = new GamepadSystem(this, this.sakuraController);
+
         this.enemyController.healthSystem.hitsToDie = 3;
         this.enemy.healthSystem = this.enemyController.healthSystem;
         
-        // 🔥 CREAR SISTEMA DE ENEMIGOS
         this.enemySystem = new EnemySystem(this, this.sakura);
         this.enemySystem.addEnemy(this.enemy);
         
-        // 🔥 CONECTAR ENEMIGO CON SU CONTROLADOR
         this.enemy.enemyController = this.enemyController;
-
-        // 🔥 AGREGAR EL ENEMIGO AL SISTEMA DE DETECCIÓN DE ATAQUE
         this.sakuraController.addEnemy(this.enemy);
         
-        // 🔥 CREAR SISTEMA DE OLEADAS
         this.waveSystem = new WaveSystem(this, this.sakura, this.enemySystem, this.sakuraController);
         
-        // Animaciones
         this.SakuraAnims = new SakuraAnims(this);
         this.EnemyAnims = new EnemyAnims(this);
 
-        // La altura 540 es el tamaño de tu pantalla, el suelo debe estar en Y = 540
         this.physics.world.setBounds(-5000, -50, 10000, 540);
         this.sakura.setCollideWorldBounds(true);
         this.enemy.setCollideWorldBounds(true);
 
-        // Colisiones
         this.physics.add.collider(this.sakura, this.floor);
         this.physics.add.collider(this.enemy, this.floor);
-        
-        // Cambiamos overlap por collider para que no puedan atravesarse
         this.physics.add.collider(this.sakura, this.enemy, this.handleEnemyCollision, null, this);
 
-        // 🔥 BARRA DE SALUD DEL JUGADOR
         this.createHealthBar();
         this.flowers = 0;
         this.coins = 0;
@@ -146,7 +123,7 @@ class GameScene extends Phaser.Scene {
         pauseButton.setPadding(8, 4, 8, 4);
         pauseButton.setInteractive({ useHandCursor: true });
         pauseButton.on('pointerdown', () => this.togglePause());
-        const storeHint = this.add.text(820, 30, 'B: Tienda', { fontSize: '14px', fill: '#ffffff' });
+        const storeHint = this.add.text(820, 30, 'Y: Tienda', { fontSize: '14px', fill: '#ffffff' });
         storeHint.setOrigin(0.5);
         storeHint.setScrollFactor(0);
         storeHint.setDepth(401);
@@ -180,7 +157,7 @@ class GameScene extends Phaser.Scene {
         this.pauseText.setDepth(501);
         this.pauseText.setVisible(false);
 
-        this.resumePrompt = this.add.text(centerX, centerY + 30, 'Presiona P o clic para continuar', { fontSize: '20px', fill: '#ffffff' });
+        this.resumePrompt = this.add.text(centerX, centerY + 30, 'Presiona P o START para continuar', { fontSize: '20px', fill: '#ffffff' });
         this.resumePrompt.setOrigin(0.5);
         this.resumePrompt.setScrollFactor(0);
         this.resumePrompt.setDepth(501);
@@ -205,9 +182,7 @@ class GameScene extends Phaser.Scene {
         document.addEventListener('webkitfullscreenchange', refreshScale);
     }
 
-    // 🔥 MÉTODO PARA CREAR BARRA DE SALUD
     createHealthBar() {
-        // Crear contenedor para la barra de salud
         this.healthBarBg = this.add.rectangle(100, 50, 200, 20, 0x000000);
         this.healthBarBg.setScrollFactor(0);
         this.healthBarBg.setDepth(100);
@@ -216,7 +191,6 @@ class GameScene extends Phaser.Scene {
         this.healthBar.setScrollFactor(0);
         this.healthBar.setDepth(101);
         
-        // Texto de salud
         const initCurrent = this.playerHealthSystem.getHealth();
         const initMax = this.playerHealthSystem.getMaxHealth();
         const initPct = initCurrent / initMax;
@@ -229,7 +203,6 @@ class GameScene extends Phaser.Scene {
         this.healthText.setDepth(102);
     }
 
-    // 🔥 MÉTODO PARA ACTUALIZAR BARRA DE SALUD
     updateHealthBar() {
         const currentHealth = this.playerHealthSystem.getHealth();
         const maxHealth = this.playerHealthSystem.getMaxHealth();
@@ -297,13 +270,8 @@ class GameScene extends Phaser.Scene {
             this.noFlowerDeaths++;
         }
         let coinProb = 0.3;
-        if (this.cards.semillaDorada.enabled) {
-            // handled via per-5 flowers; keep base prob
-            coinProb = 0.3;
-        }
-        if (Math.random() < coinProb) {
-            this.spawnPickup('coin', enemy.x, enemy.y);
-        }
+        if (this.cards.semillaDorada.enabled) coinProb = 0.3;
+        if (Math.random() < coinProb) this.spawnPickup('coin', enemy.x, enemy.y);
         if (this.cards.florCarmesi) {
             const trail = this.add.rectangle(enemy.x, enemy.y, 60, 10, 0xff0000);
             const zone = this.add.zone(enemy.x, enemy.y, 60, 10);
@@ -320,12 +288,8 @@ class GameScene extends Phaser.Scene {
         }
         const isElite = enemy.enemyData && (enemy.enemyData.type === 'Punisher' || enemy.enemyData.type === 'Grimm');
         if (isElite) {
-            if (this.cards.bendicionSilvestre.enabled) {
-                this.cards.bendicionSilvestre.activeUntil = this.time.now + 60000;
-            }
-            if (this.cards.espirituAliado.enabled && Math.random() < 0.1) {
-                this.spawnAlly();
-            }
+            if (this.cards.bendicionSilvestre.enabled) this.cards.bendicionSilvestre.activeUntil = this.time.now + 60000;
+            if (this.cards.espirituAliado.enabled && Math.random() < 0.1) this.spawnAlly();
         }
     }
 
@@ -342,9 +306,7 @@ class GameScene extends Phaser.Scene {
         zone.visual = rect;
         this.pickupsGroup.add(zone);
         this.time.delayedCall(15000, () => {
-            if (zone.active) {
-                this.pickupsGroup.remove(zone, true, true);
-            }
+            if (zone.active) this.pickupsGroup.remove(zone, true, true);
             if (rect && rect.active) rect.destroy();
         });
     }
@@ -401,6 +363,9 @@ class GameScene extends Phaser.Scene {
         this.storeKeys.two.on('down', () => this.purchaseCard(1));
         this.storeKeys.three.on('down', () => this.purchaseCard(2));
         this.storeKeys.r.on('down', () => this.rerollStore());
+
+        // Notificar al gamepad que la tienda abrió
+        if (this.gamepadSystem) this.gamepadSystem.onStoreOpen();
     }
 
     closeStore() {
@@ -419,6 +384,9 @@ class GameScene extends Phaser.Scene {
             this.storeKeys.r.destroy();
             this.storeKeys = null;
         }
+
+        // Notificar al gamepad que la tienda cerró
+        if (this.gamepadSystem) this.gamepadSystem.onStoreClose();
     }
 
     purchaseCard(index) {
@@ -455,6 +423,9 @@ class GameScene extends Phaser.Scene {
         const centerY = this.cameras.main.height / 2;
         const offers = this.cardStore.rollOffers();
         this.renderStoreUI(offers, centerX, centerY);
+
+        // Resetear selector del gamepad tras reroll
+        if (this.gamepadSystem) this.gamepadSystem.onStoreOpen();
     }
 
     renderStoreUI(offers, centerX, centerY) {
@@ -492,7 +463,7 @@ class GameScene extends Phaser.Scene {
             key.setDepth(702);
             this.storeUI.push(bg, title, sub, desc, key);
         });
-        const reroll = this.add.text(centerX, centerY + 240, 'Re-roll: 3 monedas (R)  |  Cerrar: B o clic', { fontSize: '16px', fill: '#ffffff' });
+        const reroll = this.add.text(centerX, centerY + 240, 'Re-roll: 3 monedas (R / X)  |  Cerrar: B', { fontSize: '16px', fill: '#ffffff' });
         reroll.setOrigin(0.5);
         reroll.setScrollFactor(0);
         reroll.setDepth(701);
@@ -596,18 +567,12 @@ class GameScene extends Phaser.Scene {
             }
         });
         this.time.delayedCall(3000, () => {
-            if (zone.active) {
-                bullet.destroy();
-                zone.destroy();
-            }
+            if (zone.active) { bullet.destroy(); zone.destroy(); }
         });
     }
-    // 🔥 MÉTODO PARA MANEJAR DAÑO AL JUGADOR
+
     handlePlayerDamage(amount) {
-        // 🔥 NO APLICAR DAÑO SI YA ESTÁ MUERTO
-        if (this.isPlayerDead) {
-            return;
-        }
+        if (this.isPlayerDead) return;
         if (this.cards.luzEspectral.enabled && this.cards.luzEspectral.activeUntil > this.time.now) {
             amount = Math.floor(amount * this.cards.luzEspectral.reduction);
         }
@@ -615,81 +580,47 @@ class GameScene extends Phaser.Scene {
             const now = this.time.now;
             if (now - this.cards.ritmoEterno.lastUse >= this.cards.ritmoEterno.cooldown) {
                 this.cards.ritmoEterno.lastUse = now;
-            } else {
-                if (this.sakuraController && this.sakuraController.resetCombo) {
-                    // evitar reset por daño
-                }
             }
         }
         
         this.playerHealthSystem.applyDamage(amount);
         this.updateHealthBar();
+
         if (this.cards.ritmoEterno.enabled) {
             const now = this.time.now;
-            if (now - this.cards.ritmoEterno.lastUse < this.cards.ritmoEterno.cooldown) {
-                // mantener combo
-            } else {
-                if (this.sakuraController && this.sakuraController.resetCombo) {
-                    this.sakuraController.resetCombo();
-                }
+            if (now - this.cards.ritmoEterno.lastUse >= this.cards.ritmoEterno.cooldown) {
+                if (this.sakuraController && this.sakuraController.resetCombo) this.sakuraController.resetCombo();
             }
         } else {
-            if (this.sakuraController && this.sakuraController.resetCombo) {
-                this.sakuraController.resetCombo();
-            }
+            if (this.sakuraController && this.sakuraController.resetCombo) this.sakuraController.resetCombo();
         }
         
-        // 🔥 REPRODUCIR ANIMACIÓN DE HURT CON MÁS CONTROL
         if (this.sakura && this.sakura.anims && !this.isPlayerDead) {
-            // Detener animación actual y reproducir hurt
             this.sakura.anims.stop();
             this.sakura.anims.play('sakura-hurt', true);
-            
-            // 🔥 BLOQUEAR CONTROLES DURANTE LA ANIMACIÓN DE HURT
             if (this.sakuraController) {
                 this.sakuraController.setCanMove(false);
-                
-                // 🔥 RESTABLECER CONTROLES DESPUÉS DE LA ANIMACIÓN
                 this.time.delayedCall(500, () => {
-                    if (this.sakuraController && !this.isPlayerDead) {
-                        this.sakuraController.setCanMove(true);
-                    }
+                    if (this.sakuraController && !this.isPlayerDead) this.sakuraController.setCanMove(true);
                 });
             }
         }
         
-        // Verificar si el jugador murió
-        if (this.playerHealthSystem.isDead()) {
-            this.playerDeath();
-        }
+        if (this.playerHealthSystem.isDead()) this.playerDeath();
     }
 
-    // 🔥 MÉTODO PARA MUERTE DEL JUGADOR
     playerDeath() {
-        // 🔥 MARCAR AL JUGADOR COMO MUERTO INMEDIATAMENTE
         this.isPlayerDead = true;
+        if (this.sakuraController) this.sakuraController.setDead(true);
         
-        // 🔥 BLOQUEAR COMPLETAMENTE LOS CONTROLES DEL JUGADOR
-        if (this.sakuraController) {
-            this.sakuraController.setDead(true);
-        }
-        
-        // 🔥 REPRODUCIR ANIMACIÓN DE MUERTE
         if (this.sakura && this.sakura.anims) {
             this.sakura.anims.stop();
             this.sakura.anims.play('sakura-death', true);
+            if (this.sakuraController) this.sakuraController.setCanMove(false);
             
-            // 🔥 BLOQUEAR CONTROLES PERMANENTEMENTE
-            if (this.sakuraController) {
-                this.sakuraController.setCanMove(false);
-            }
-            
-            // 🔥 ESPERAR A QUE TERMINE LA ANIMACIÓN DE MUERTE
             this.time.delayedCall(1000, () => {
-                // Detener el juego después de la animación
                 this.physics.pause();
                 
-                // Mostrar mensaje de game over
                 const gameOverText = this.add.text(400, 270, 'GAME OVER', {
                     fontSize: '64px',
                     fill: '#ff0000',
@@ -699,7 +630,6 @@ class GameScene extends Phaser.Scene {
                 gameOverText.setScrollFactor(0);
                 gameOverText.setDepth(200);
                 
-                // Opción para reiniciar
                 const restartText = this.add.text(400, 320, 'Presiona R para reiniciar', {
                     fontSize: '24px',
                     fill: '#ffffff'
@@ -708,44 +638,27 @@ class GameScene extends Phaser.Scene {
                 restartText.setScrollFactor(0);
                 restartText.setDepth(201);
                 
-                // Reiniciar con la tecla R
-                this.input.keyboard.once('keydown-R', () => {
-                    this.scene.restart();
-                });
+                this.input.keyboard.once('keydown-R', () => this.scene.restart());
             });
         }
     }
 
-    // 🔥 MÉTODO PARA MANEJAR COLISIÓN ENTRE JUGADOR Y ENEMIGO
     handleEnemyCollision(sakura, enemy) {
-        // Detener el movimiento del enemigo para que no se mueva lateralmente
-        if (enemy.body) {
-            enemy.setVelocityX(0);
-        }
-        
-        // Si el enemigo tiene un controlador, detener su lógica de movimiento
+        if (enemy.body) enemy.setVelocityX(0);
         if (enemy.enemyController) {
-            if (enemy.x > sakura.x) {
-                enemy.setFlipX(true);
-            } else {
-                enemy.setFlipX(false);
-            }
+            if (enemy.x > sakura.x) { enemy.setFlipX(true); } else { enemy.setFlipX(false); }
         }
     }
 
     togglePause() {
-        if (this.isPlayerDead) {
-            return;
-        }
+        if (this.isPlayerDead) return;
         this.isPaused = !this.isPaused;
         if (this.isPaused) {
             this.physics.pause();
             if (this.sakura && this.sakura.anims) this.sakura.anims.pause();
             if (this.enemy && this.enemy.anims) this.enemy.anims.pause();
             if (this.enemySystem && this.enemySystem.enemies) {
-                this.enemySystem.enemies.forEach(e => {
-                    if (e && e.anims) e.anims.pause();
-                });
+                this.enemySystem.enemies.forEach(e => { if (e && e.anims) e.anims.pause(); });
             }
             this.pauseOverlay.setVisible(true);
             this.pauseText.setVisible(true);
@@ -755,9 +668,7 @@ class GameScene extends Phaser.Scene {
             if (this.sakura && this.sakura.anims) this.sakura.anims.resume();
             if (this.enemy && this.enemy.anims) this.enemy.anims.resume();
             if (this.enemySystem && this.enemySystem.enemies) {
-                this.enemySystem.enemies.forEach(e => {
-                    if (e && e.anims) e.anims.resume();
-                });
+                this.enemySystem.enemies.forEach(e => { if (e && e.anims) e.anims.resume(); });
             }
             this.pauseOverlay.setVisible(false);
             this.pauseText.setVisible(false);
@@ -766,30 +677,18 @@ class GameScene extends Phaser.Scene {
     }
 
     update(time, delta) {
-        // 🔥 NO ACTUALIZAR NADA SI EL JUGADOR ESTÁ MUERTO
         if (this.isPlayerDead || this.isPaused || this.isStoreOpen) {
+            // El gamepad sigue corriendo para poder quitar pausa/tienda con mando
+            if (this.gamepadSystem) this.gamepadSystem.update();
             return;
         }
         
-        // 🔥 ACTUALIZAR SISTEMA DE OLEADAS
-        if (this.waveSystem) {
-            this.waveSystem.update(delta);
-        }
-        
-        // Background
+        if (this.waveSystem) this.waveSystem.update(delta);
         this.backgroundManager.update();
-
-        // Sakura
         this.sakuraController.update();
-
-        // 🔥 ACTUALIZAR SISTEMA DE ENEMIGOS
-        if (this.enemySystem) {
-            this.enemySystem.update();
-        }
-
-        // Enemigo individual original
+        if (this.gamepadSystem) this.gamepadSystem.update();
+        if (this.enemySystem) this.enemySystem.update();
         this.enemyController.update();
-
         this.updateMobileUI();
     }
 
@@ -861,8 +760,6 @@ class GameScene extends Phaser.Scene {
             } else if (this.mobileInput.right) {
                 this.sakuraController.sakura.setVelocityX(this.sakuraController.moveSpeed);
                 this.sakuraController.sakura.setFlipX(false);
-            } else {
-                // no-op, keyboard update will zero when needed
             }
         }
     }
