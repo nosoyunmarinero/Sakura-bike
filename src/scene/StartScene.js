@@ -70,6 +70,21 @@ class StartScene extends Phaser.Scene {
         }
 
         overlay.setInteractive();
+        if (isMobile) {
+            overlay.on('pointerdown', async () => {
+                try {
+                    if (this.scale && this.scale.startFullscreen) {
+                        this.scale.startFullscreen();
+                    } else if (document.documentElement.requestFullscreen) {
+                        await document.documentElement.requestFullscreen();
+                    }
+                    if (screen.orientation && screen.orientation.lock) {
+                        try { await screen.orientation.lock('landscape'); } catch(e) {}
+                    }
+                } catch(e) {}
+                this.scene.start('GameScene');
+            });
+        }
     }
 }
 
