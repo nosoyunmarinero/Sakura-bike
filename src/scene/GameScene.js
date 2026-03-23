@@ -1,719 +1,916 @@
-import SakuraController   from '../controls/SakuraController.js';
-import GamepadSystem      from '../controls/GamepadSystem.js';
-import EnemySystem        from '../systems/EnemySystem.js';
-import WaveSystem         from '../systems/WaveSystem.js';
-import HealthSystem       from '../systems/HealthSystem.js';
-import CardStore          from '../systems/CardStore.js';
-import SakuraAnims        from '../anims/SakuraAnims.js';
-import SkeletonAnims      from '../enemies/Skeleton/SkeletonAnims.js';
-import ShooterAnims       from '../enemies/Shooter/ShooterAnims.js';
-import MorgansAnims       from '../enemies/Morgans/MorgansAnims.js';
-import BackgroundManager  from '../background/brackgroundManager.js';
+import SakuraController from "../controls/SakuraController.js";
+import GamepadSystem from "../controls/GamepadSystem.js";
+import EnemySystem from "../systems/EnemySystem.js";
+import WaveSystem from "../systems/WaveSystem.js";
+import HealthSystem from "../systems/HealthSystem.js";
+import CardStore from "../systems/CardStore.js";
+import SakuraAnims from "../anims/SakuraAnims.js";
+import SkeletonAnims from "../enemies/Skeleton/SkeletonAnims.js";
+import ShooterAnims from "../enemies/Shooter/ShooterAnims.js";
+import MorgansAnims from "../enemies/Morgans/MorgansAnims.js";
+import BackgroundManager from "../background/brackgroundManager.js";
 
 class GameScene extends Phaser.Scene {
-    constructor() {
-        super('GameScene');
-    }
-
-    preload() {}
-
-    create() {
-        this.isPlayerDead = false;
-        this.isPaused     = false;
-        this.isStoreOpen  = false;
-        this.isMobile     = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-
-        this.physics.world.gravity.y = 800;
-
-        // ─── Background ───────────────────────────────────────────────────
-        const layersConfig = [
-            { key: '1', speed: 0.1 }, { key: '2', speed: 0.2 },
-            { key: '3', speed: 0.3 }, { key: '4', speed: 0.4 },
-            { key: '5', speed: 0.5 }, { key: '6', speed: 0.6 },
-            { key: '7', speed: 0.8 }, { key: '8', speed: 1.0 },
-        ];
-        this.backgroundManager = new BackgroundManager(this, layersConfig);
-
-        // ─── Jugador ──────────────────────────────────────────────────────
-        this.sakura = this.physics.add.sprite(100, 300, 'player_walk').setScale(2, 2);
-        this.sakura.body.setSize(25, 30);
-        this.sakura.body.setOffset(10, 10);
-        this.playerHealthSystem = new HealthSystem(this, this.sakura, 100);
-
-        this.cameras.main.startFollow(this.sakura);
-        this.cameras.main.setLerp(0.1, 0.1);
-        this.cameras.main.setBounds(-5000, 0, 10000, 540);
-
-        // ─── Suelo ────────────────────────────────────────────────────────
-        this.floor = this.physics.add.staticGroup();
-        this.floor.create(480, 540, null).setSize(10000, 20).setVisible(false);
-
-        // ─── Límites del mundo ────────────────────────────────────────────
-        this.physics.world.setBounds(-5000, -50, 10000, 540);
-        this.sakura.setCollideWorldBounds(true);
-        this.physics.add.collider(this.sakura, this.floor);
-
-        // ─── Controllers del jugador ──────────────────────────────────────
-        this.sakuraController = new SakuraController(this, this.sakura);
-        this.gamepadSystem    = new GamepadSystem(this, this.sakuraController);
-
-        // ─── Sistemas de enemigos ─────────────────────────────────────────
-        this.enemySystem = new EnemySystem(this, this.sakura);
-        this.waveSystem  = new WaveSystem(this, this.sakura, this.enemySystem, this.sakuraController);
-
-        // ─── Animaciones ──────────────────────────────────────────────────
-        new SakuraAnims(this);
-        new SkeletonAnims(this);
-        new ShooterAnims(this);
-        new MorgansAnims(this);
-
-        // ─── HUD ──────────────────────────────────────────────────────────
-        this.createHealthBar();
-        this.flowers       = 0;
-        this.coins         = 0;
-        this.noFlowerDeaths = 0;
-        this.createResourceHUD();
-        this.ownedCards = [];
-
-        const rightXOwned = this.cameras.main.width - 24;
-        this.ownedCardsText = this.add.text(rightXOwned, 120, 'Cartas: -', { fontSize: '14px', fill: '#ffffff' });
-        this.ownedCardsText.setOrigin(1, 0).setScrollFactor(0).setDepth(150);
-
-        // ─── Pickups ──────────────────────────────────────────────────────
-        this.pickupsGroup = this.physics.add.group({ allowGravity: false, immovable: true });
-        this.physics.add.overlap(this.sakura, this.pickupsGroup, this.handlePickupOverlap, null, this);
-
-        // ─── Tienda de cartas ─────────────────────────────────────────────
-        this.cardStore = new CardStore(this);
-        this.cards = {
-            coronaEspinas:    false,
-            sakuraShuriken:   false,
-            ritmoEterno:      { enabled: false, lastUse: 0, cooldown: 30000 },
-            broteExplosivo:   { enabled: false, counter: 0 },
-            bendicionSilvestre: { enabled: false, activeUntil: 0 },
-            semillaDorada:    { enabled: false, flowerCount: 0 },
-            espirituAliado:   { enabled: false },
-            vinculoEspiritual: { enabled: false },
-            florCarmesi:      false,
-            luzEspectral:     { enabled: false, activeUntil: 0, reduction: 0.95 },
-        };
-
-        // ─── Hazards (cartas AoE) ─────────────────────────────────────────
-        this.hazards = this.physics.add.group({ allowGravity: false });
-        this.physics.add.overlap(this.hazards, this.enemySystem.enemies, (hazard, enemy) => {
-            if (enemy?.enemyController) enemy.enemyController.takeDamage();
-        });
-
-        // ─── UI de pausa ──────────────────────────────────────────────────
-        const pauseButton = this.add.text(900, 30, 'Pausa', {
-            fontSize: '18px', fill: '#000000', backgroundColor: '#ffffff'
-        });
-        pauseButton.setOrigin(0.5).setScrollFactor(0).setDepth(400).setPadding(8, 4, 8, 4);
-        pauseButton.setInteractive({ useHandCursor: true });
-        pauseButton.on('pointerdown', () => this.togglePause());
-
-        this.add.text(820, 30, 'Y: Tienda', { fontSize: '14px', fill: '#ffffff' })
-            .setOrigin(0.5).setScrollFactor(0).setDepth(401);
-
-        const fsButton = this.add.text(760, 30, 'Fullscreen', {
-            fontSize: '14px', fill: '#ffffff', backgroundColor: '#333333'
-        });
-        fsButton.setOrigin(0.5).setScrollFactor(0).setDepth(401).setPadding(6, 4, 6, 4);
-        fsButton.setInteractive({ useHandCursor: true });
-        fsButton.on('pointerdown', () => {
-            if (this.scale?.startFullscreen) this.scale.startFullscreen();
-            else document.documentElement.requestFullscreen?.();
-            this.applyFullscreenCanvasScale();
-        });
-
-        const centerX = this.cameras.main.width  / 2;
-        const centerY = this.cameras.main.height / 2;
-
-        this.pauseOverlay = this.add.rectangle(centerX, centerY,
-            this.cameras.main.width, this.cameras.main.height, 0x000000, 0.5);
-        this.pauseOverlay.setScrollFactor(0).setDepth(500).setVisible(false).setInteractive();
-        this.pauseOverlay.on('pointerdown', () => this.togglePause());
-
-        this.pauseText = this.add.text(centerX, centerY - 20, 'PAUSA', {
-            fontSize: '48px', fill: '#ffffff'
-        });
-        this.pauseText.setOrigin(0.5).setScrollFactor(0).setDepth(501).setVisible(false);
-
-        this.resumePrompt = this.add.text(centerX, centerY + 30,
-            'Presiona P o START para continuar', { fontSize: '20px', fill: '#ffffff' });
-        this.resumePrompt.setOrigin(0.5).setScrollFactor(0).setDepth(501).setVisible(false);
-
-        this.input.keyboard.on('keydown-P', () => this.togglePause());
-        this.input.keyboard.on('keydown-B', () => this.toggleStore());
-
-        // ─── Fullscreen listeners ─────────────────────────────────────────
-        const refreshScale = () => {
-            if (document.fullscreenElement || document.webkitFullscreenElement) {
-                this.applyFullscreenCanvasScale();
-            } else {
-                const canvas = this.game?.canvas;
-                if (canvas) {
-                    canvas.style.transform = 'none';
-                    canvas.style.transformOrigin = 'center center';
-                }
-            }
-            this.scale?.refresh?.();
-        };
-        document.addEventListener('fullscreenchange', refreshScale);
-        document.addEventListener('webkitfullscreenchange', refreshScale);
-
-        // ─── Mobile ───────────────────────────────────────────────────────
-        this.setupMobileUI();
-    }
-
-    // ─── Health bar ───────────────────────────────────────────────────────
-
-    createHealthBar() {
-        this.healthBarBg = this.add.rectangle(100, 50, 200, 20, 0x000000);
-        this.healthBarBg.setScrollFactor(0).setDepth(100);
-
-        this.healthBar = this.add.rectangle(100, 50, 200, 20, 0xff0000);
-        this.healthBar.setScrollFactor(0).setDepth(101);
-
-        const cur = this.playerHealthSystem.getHealth();
-        const max = this.playerHealthSystem.getMaxHealth();
-        this.healthBar.width = 200 * (cur / max);
-
-        this.healthText = this.add.text(100, 80, `HP: ${cur}/${max}`, {
-            fontSize: '16px', fill: '#ffffff'
-        });
-        this.healthText.setScrollFactor(0).setDepth(102);
-    }
-
-    updateHealthBar() {
-        const cur = this.playerHealthSystem.getHealth();
-        const max = this.playerHealthSystem.getMaxHealth();
-        this.healthBar.width = 200 * (cur / max);
-        this.healthText.setText(`HP: ${cur}/${max}`);
-    }
-
-    // ─── Resource HUD ─────────────────────────────────────────────────────
-
-    createResourceHUD() {
-        const rightX = this.cameras.main.width - 24;
-        this.comboText = this.add.text(rightX, 60, 'Combo: 0 x1', { fontSize: '16px', fill: '#ffffff' });
-        this.comboText.setOrigin(1, 0).setScrollFactor(0).setDepth(150);
-
-        this.flowersText = this.add.text(rightX, 80, `Flores: ${this.flowers}`, { fontSize: '16px', fill: '#ffffff' });
-        this.flowersText.setOrigin(1, 0).setScrollFactor(0).setDepth(150);
-
-        this.coinsText = this.add.text(rightX, 100, `Monedas: ${this.coins}`, { fontSize: '16px', fill: '#ffffff' });
-        this.coinsText.setOrigin(1, 0).setScrollFactor(0).setDepth(150);
-    }
-
-    collectResource(type, amount = 1) {
-        if (type === 'flower') {
-            this.flowers += amount;
-            this.flowersText.setText(`Flores: ${this.flowers}`);
-            if (this.cards.semillaDorada.enabled) {
-                this.cards.semillaDorada.flowerCount += amount;
-                if (this.cards.semillaDorada.flowerCount >= 5) {
-                    this.cards.semillaDorada.flowerCount -= 5;
-                    this.collectResource('coin', 1);
-                }
-            }
-            if (this.cards.luzEspectral.enabled) {
-                this.cards.luzEspectral.activeUntil = this.time.now + 10000;
-            }
-            if (this.cards.broteExplosivo.enabled) {
-                this.cards.broteExplosivo.counter += amount;
-                if (this.cards.broteExplosivo.counter >= 10) {
-                    this.cards.broteExplosivo.counter -= 10;
-                    this.spawnExplosionAoE(this.sakura.x, this.sakura.y, 90);
-                }
-            }
-        } else if (type === 'coin') {
-            this.coins += amount;
-            this.coinsText.setText(`Monedas: ${this.coins}`);
-        }
-    }
-
-    updateComboUI(count, mult) {
-        this.comboText?.setText(`Combo: ${count} x${mult}`);
-    }
-
-    // ─── Drops ────────────────────────────────────────────────────────────
-
-    onEnemyDeath(enemy) {
-        const guaranteeFlower = this.noFlowerDeaths >= 10;
-        if (guaranteeFlower || Math.random() < 0.6) {
-            this.spawnPickup('flower', enemy.x, enemy.y);
-            this.noFlowerDeaths = 0;
-        } else {
-            this.noFlowerDeaths++;
-        }
-        if (Math.random() < 0.3) this.spawnPickup('coin', enemy.x, enemy.y);
-
-        if (this.cards.florCarmesi) {
-            const trail = this.add.rectangle(enemy.x, enemy.y, 60, 10, 0xff0000);
-            const zone  = this.add.zone(enemy.x, enemy.y, 60, 10);
-            this.physics.add.existing(zone);
-            zone.body.setAllowGravity(false);
-            zone.visual = trail;
-            this.hazards.add(zone);
-            this.time.delayedCall(2000, () => {
-                if (zone.active) { zone.visual?.destroy(); zone.destroy(); }
-            });
-        }
-
-        const isElite = enemy.enemyData?.type === 'Punisher' || enemy.enemyData?.type === 'Grimm';
-        if (isElite) {
-            if (this.cards.bendicionSilvestre.enabled)
-                this.cards.bendicionSilvestre.activeUntil = this.time.now + 60000;
-            if (this.cards.espirituAliado.enabled && Math.random() < 0.1)
-                this.spawnAlly?.();
-        }
-    }
-
-    spawnPickup(type, x, y) {
-        const size  = 16;
-        const zone  = this.add.zone(x, y, size, size);
-        this.physics.add.existing(zone);
-        zone.body.setAllowGravity(false).setImmovable(true);
-        zone.pickupType = type;
-
-        const color = type === 'flower' ? 0xff66cc : 0xffd700;
-        const rect  = this.add.rectangle(x, y, size, size, color).setDepth(140);
-        zone.visual = rect;
-        this.pickupsGroup.add(zone);
-
-        this.time.delayedCall(15000, () => {
-            if (zone.active) this.pickupsGroup.remove(zone, true, true);
-            if (rect?.active) rect.destroy();
-        });
-    }
-
-    handlePickupOverlap(player, zone) {
-        if (!zone.pickupType) return;
-        this.collectResource(zone.pickupType, 1);
-        zone.visual?.destroy();
-        this.pickupsGroup.remove(zone, true, true);
-    }
-
-    // ─── Tienda ───────────────────────────────────────────────────────────
-
-    toggleStore() {
-        if (this.isPlayerDead) return;
-        if (this.isStoreOpen) { this.closeStore(); return; }
-
-        const nearEnemy = this.enemySystem.enemies.some(e =>
-            Phaser.Math.Distance.Between(e.x, e.y, this.sakura.x, this.sakura.y) < 120
-        );
-        if (nearEnemy) {
-            const warn = this.add.text(480, 100, 'No puedes abrir la tienda en combate', {
-                fontSize: '18px', fill: '#ff6666'
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(600);
-            this.time.delayedCall(1200, () => warn.destroy());
-            return;
-        }
-        this.openStore();
-    }
-
-    openStore() {
-        this.isStoreOpen = true;
-        this.physics.pause();
-        this.sakura?.anims.pause();
-        this.enemySystem.enemies.forEach(e => e.anims?.pause());
-
-        const centerX = this.cameras.main.width  / 2;
-        const centerY = this.cameras.main.height / 2;
-
-        this.storeOverlay = this.add.rectangle(centerX, centerY,
-            this.cameras.main.width, this.cameras.main.height, 0x000000, 0.7);
-        this.storeOverlay.setScrollFactor(0).setDepth(700).setInteractive();
-        this.storeOverlay.on('pointerdown', () => this.closeStore());
-
-        const offers = this.cardStore.rollOffers();
-        this.renderStoreUI(offers, centerX, centerY);
-
-        this.storeKeys = this.input.keyboard.addKeys({
-            one: Phaser.Input.Keyboard.KeyCodes.ONE,
-            two: Phaser.Input.Keyboard.KeyCodes.TWO,
-            three: Phaser.Input.Keyboard.KeyCodes.THREE,
-            r: Phaser.Input.Keyboard.KeyCodes.R,
-        });
-        this.storeKeys.one.on('down', () => this.purchaseCard(0));
-        this.storeKeys.two.on('down', () => this.purchaseCard(1));
-        this.storeKeys.three.on('down', () => this.purchaseCard(2));
-        this.storeKeys.r.on('down', () => this.rerollStore());
-
-        this.gamepadSystem?.onStoreOpen();
-    }
-
-    closeStore() {
-        this.isStoreOpen = false;
-        this.physics.resume();
-        this.sakura?.anims.resume();
-        this.enemySystem.enemies.forEach(e => e.anims?.resume());
-
-        this.storeOverlay?.destroy();
-        this.clearStoreUI();
-
-        if (this.storeKeys) {
-            this.storeKeys.one.destroy();
-            this.storeKeys.two.destroy();
-            this.storeKeys.three.destroy();
-            this.storeKeys.r.destroy();
-            this.storeKeys = null;
-        }
-        this.gamepadSystem?.onStoreClose();
-    }
-
-    purchaseCard(index) {
-        const ok = this.cardStore.purchase(index);
-        if (!ok) {
-            const warn = this.add.text(480, 120, 'No tienes suficientes flores', {
-                fontSize: '18px', fill: '#ff6666'
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(702);
-            this.time.delayedCall(1200, () => warn.destroy());
-            return;
-        }
-        const card = this.cardStore.offers[index];
-        if (card) {
-            this.ownedCards.push(card.name);
-            this.refreshOwnedCardsUI();
-        }
-        this.closeStore();
-    }
-
-    rerollStore() {
-        if (this.coins < 3) {
-            const warn = this.add.text(480, 120, 'No tienes suficientes monedas', {
-                fontSize: '18px', fill: '#ff6666'
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(702);
-            this.time.delayedCall(1200, () => warn.destroy());
-            return;
-        }
-        this.coins -= 3;
-        this.coinsText.setText(`Monedas: ${this.coins}`);
-        this.clearStoreUI();
-        const centerX = this.cameras.main.width  / 2;
-        const centerY = this.cameras.main.height / 2;
-        this.renderStoreUI(this.cardStore.rollOffers(), centerX, centerY);
-        this.gamepadSystem?.onStoreOpen();
-    }
-
-    renderStoreUI(offers, centerX, centerY) {
-        this.storeUI = [];
-        const header = this.add.text(centerX, centerY - 150,
-            `Tienda de Cartas\nFlores: ${this.flowers}  Monedas: ${this.coins}`,
-            { fontSize: '20px', fill: '#ffffff', align: 'center' });
-        header.setOrigin(0.5).setScrollFactor(0).setDepth(701);
-        this.storeUI.push(header);
-
-        const positions = [-200, 0, 200];
-        offers.forEach((card, i) => {
-            const x     = centerX + positions[i];
-            const y     = centerY;
-            const color = this.cardStore.getRarityColor(card.rarity);
-
-            const bg = this.add.rectangle(x, y, 180, 220, 0x111111, 0.9).setStrokeStyle(3, color);
-            bg.setScrollFactor(0).setDepth(701).setInteractive();
-            bg.on('pointerdown', () => this.purchaseCard(i));
-
-            const title = this.add.text(x, y + 130, card.name, {
-                fontSize: '18px', fill: '#ffffff', align: 'center', wordWrap: { width: 200 }
-            }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(702);
-
-            const sub = this.add.text(x, y + 152, `[${card.rarity}] - ${card.cost} flores`, {
-                fontSize: '14px', fill: '#cccccc', align: 'center'
-            }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(702);
-
-            const desc = this.add.text(x, y + 175, card.desc, {
-                fontSize: '14px', fill: '#dddddd', align: 'center', wordWrap: { width: 220 }
-            }).setOrigin(0.5, 0).setScrollFactor(0).setDepth(702);
-
-            const key = this.add.text(x, y + 205, `Pulsa ${i + 1}`, {
-                fontSize: '16px', fill: '#ffffff'
-            }).setOrigin(0.5).setScrollFactor(0).setDepth(702);
-
-            this.storeUI.push(bg, title, sub, desc, key);
-        });
-
-        const reroll = this.add.text(centerX, centerY + 240,
-            'Re-roll: 3 monedas (R / X)  |  Cerrar: B',
-            { fontSize: '16px', fill: '#ffffff' });
-        reroll.setOrigin(0.5).setScrollFactor(0).setDepth(701);
-        this.storeUI.push(reroll);
-    }
-
-    clearStoreUI() {
-        this.storeUI?.forEach(el => el?.destroy());
-        this.storeUI = null;
-    }
-
-    refreshOwnedCardsUI() {
-        const list = this.ownedCards.length ? this.ownedCards.join(', ') : '-';
-        this.ownedCardsText?.setText(`Cartas: ${list}`);
-    }
-
-    // ─── Cartas ───────────────────────────────────────────────────────────
-
-    applyCard(name) {
-        if (name === 'Corona de espinas') {
-            this.cards.coronaEspinas = true;
-            if (!this.thornsTimer) {
-                this.thornsTimer = this.time.addEvent({
-                    delay: 3000, loop: true,
-                    callback: () => this.spawnExplosionAoE(this.sakura.x, this.sakura.y, 60)
-                });
-            }
-        } else if (name === 'Sakura Shuriken') {
-            this.cards.sakuraShuriken = true;
-            if (!this.shurikenTimer) {
-                this.shurikenTimer = this.time.addEvent({
-                    delay: 2000, loop: true,
-                    callback: () => this.spawnPlayerProjectile()
-                });
-            }
-        } else if (name === 'Ritmo eterno')        { this.cards.ritmoEterno.enabled      = true; }
-        else if (name === 'Brote explosivo')        { this.cards.broteExplosivo.enabled    = true; }
-        else if (name === 'Bendición silvestre')    { this.cards.bendicionSilvestre.enabled = true; }
-        else if (name === 'Semilla dorada')         { this.cards.semillaDorada.enabled     = true; }
-        else if (name === 'Espíritu aliado')        { this.cards.espirituAliado.enabled    = true; }
-        else if (name === 'Vínculo espiritual')     { this.cards.vinculoEspiritual.enabled = true; }
-        else if (name === 'Flor Carmesí')           { this.cards.florCarmesi               = true; }
-        else if (name === 'Luz espectral')          { this.cards.luzEspectral.enabled      = true; }
-    }
-
-    spawnExplosionAoE(x, y, radius) {
-        const zone = this.add.zone(x, y, radius * 2, radius * 2);
-        this.physics.add.existing(zone);
-        zone.body.setAllowGravity(false);
-        this.enemySystem?.enemies.forEach(enemy => {
-            if (enemy?.active && this.physics.overlap(zone, enemy)) {
-                enemy.enemyController?.takeDamage();
-            }
-        });
-        this.time.delayedCall(50, () => zone.destroy());
-    }
-
-    spawnPlayerProjectile() {
-        if (!this.enemySystem || this.enemySystem.enemies.length === 0) return;
-        const target = this.enemySystem.enemies.reduce((best, e) => {
-            if (!best) return e;
-            const d  = Phaser.Math.Distance.Between(this.sakura.x, this.sakura.y, e.x, e.y);
-            const db = Phaser.Math.Distance.Between(this.sakura.x, this.sakura.y, best.x, best.y);
-            return d < db ? e : best;
-        }, null);
-        if (!target) return;
-
-        const bullet = this.add.rectangle(this.sakura.x, this.sakura.y - 20, 6, 6, 0x66ccff);
-        const zone   = this.add.zone(bullet.x, bullet.y, 6, 6);
-        this.physics.add.existing(zone);
-        zone.body.setAllowGravity(false);
-        const angle = Phaser.Math.Angle.Between(zone.x, zone.y, target.x, target.y);
-        zone.body.setVelocity(Math.cos(angle) * 300, Math.sin(angle) * 300);
-        zone.visual = bullet;
-
-        this.time.addEvent({
-            delay: 16, loop: true,
-            callback: () => {
-                if (!zone.active) return;
-                bullet.x = zone.x;
-                bullet.y = zone.y;
-                if (this.physics.overlap(zone, target)) {
-                    target.enemyController?.takeDamage();
-                    bullet.destroy();
-                    zone.destroy();
-                }
-            }
-        });
-        this.time.delayedCall(3000, () => {
-            if (zone.active) { bullet.destroy(); zone.destroy(); }
-        });
-    }
-
-    // ─── Daño al jugador ─────────────────────────────────────────────────
-
-    handlePlayerDamage(amount) {
-        if (this.isPlayerDead) return;
-
-        if (this.cards.luzEspectral.enabled && this.cards.luzEspectral.activeUntil > this.time.now) {
-            amount = Math.floor(amount * this.cards.luzEspectral.reduction);
-        }
-
-        this.playerHealthSystem.applyDamage(amount);
-        this.updateHealthBar();
-
-        const resetCombo = () => this.sakuraController?.resetCombo?.();
-        if (this.cards.ritmoEterno.enabled) {
-            const now = this.time.now;
-            if (now - this.cards.ritmoEterno.lastUse >= this.cards.ritmoEterno.cooldown) {
-                this.cards.ritmoEterno.lastUse = now;
-                resetCombo();
-            }
-        } else {
-            resetCombo();
-        }
-
-        if (this.sakura?.anims && !this.isPlayerDead) {
-            this.sakura.anims.stop();
-            this.sakura.anims.play('sakura-hurt', true);
-            if (this.sakuraController) {
-                this.sakuraController.setCanMove(false);
-                this.time.delayedCall(500, () => {
-                    if (this.sakuraController && !this.isPlayerDead)
-                        this.sakuraController.setCanMove(true);
-                });
-            }
-        }
-
-        if (this.playerHealthSystem.isDead()) this.playerDeath();
-    }
-
-    playerDeath() {
-        this.isPlayerDead = true;
-        this.sakuraController?.setDead(true);
-
-        if (this.sakura?.anims) {
-            this.sakura.anims.stop();
-            this.sakura.anims.play('sakura-death', true);
-            this.sakuraController?.setCanMove(false);
-
-            this.time.delayedCall(1000, () => {
-                this.physics.pause();
-
-                this.add.text(400, 270, 'GAME OVER', {
-                    fontSize: '64px', fill: '#ff0000', fontStyle: 'bold'
-                }).setOrigin(0.5).setScrollFactor(0).setDepth(200);
-
-                this.add.text(400, 320, 'Presiona R para reiniciar', {
-                    fontSize: '24px', fill: '#ffffff'
-                }).setOrigin(0.5).setScrollFactor(0).setDepth(201);
-
-                this.input.keyboard.once('keydown-R', () => this.scene.restart());
-            });
-        }
-    }
-
-    // ─── Colisión jugador-enemigo ─────────────────────────────────────────
-
-    handleEnemyCollision(sakura, enemy) {
-        enemy.setVelocityX(0);
-        if (enemy.enemyController) {
-            enemy.setFlipX(enemy.x > sakura.x);
-        }
-    }
-
-    // ─── Pausa ────────────────────────────────────────────────────────────
-
-    togglePause() {
-        if (this.isPlayerDead) return;
-        this.isPaused = !this.isPaused;
-
-        if (this.isPaused) {
-            this.physics.pause();
-            this.sakura?.anims.pause();
-            this.enemySystem?.enemies.forEach(e => e.anims?.pause());
-            this.pauseOverlay.setVisible(true);
-            this.pauseText.setVisible(true);
-            this.resumePrompt.setVisible(true);
-        } else {
-            this.physics.resume();
-            this.sakura?.anims.resume();
-            this.enemySystem?.enemies.forEach(e => e.anims?.resume());
-            this.pauseOverlay.setVisible(false);
-            this.pauseText.setVisible(false);
-            this.resumePrompt.setVisible(false);
-        }
-    }
-
-    // ─── Update ───────────────────────────────────────────────────────────
-
-    update(time, delta) {
-        if (this.isPlayerDead || this.isPaused || this.isStoreOpen) {
-            this.gamepadSystem?.update();
-            return;
-        }
-
-        this.waveSystem?.update(delta);
-        this.backgroundManager.update();
-        this.sakuraController.update();
-        this.gamepadSystem?.update();
-        this.enemySystem?.update();
-        this.updateMobileUI();
-    }
-
-    // ─── Fullscreen ───────────────────────────────────────────────────────
-
-    applyFullscreenCanvasScale() {
+  constructor() {
+    super("GameScene");
+  }
+
+  preload() {}
+
+  create() {
+    this.isPlayerDead = false;
+    this.isPaused = false;
+    this.isStoreOpen = false;
+    this.isMobile = "ontouchstart" in window || navigator.maxTouchPoints > 0;
+
+    this.physics.world.gravity.y = 800;
+
+    // ─── Background ───────────────────────────────────────────────────
+    const layersConfig = [
+      { key: "1", speed: 0.1 },
+      { key: "2", speed: 0.2 },
+      { key: "3", speed: 0.3 },
+      { key: "4", speed: 0.4 },
+      { key: "5", speed: 0.5 },
+      { key: "6", speed: 0.6 },
+      { key: "7", speed: 0.8 },
+      { key: "8", speed: 1.0 },
+    ];
+    this.backgroundManager = new BackgroundManager(this, layersConfig);
+
+    // ─── Jugador ──────────────────────────────────────────────────────
+    this.sakura = this.physics.add
+      .sprite(100, 300, "player_walk")
+      .setScale(2, 2);
+    this.sakura.body.setSize(25, 30);
+    this.sakura.body.setOffset(10, 10);
+    this.playerHealthSystem = new HealthSystem(this, this.sakura, 100);
+
+    this.cameras.main.startFollow(this.sakura);
+    this.cameras.main.setLerp(0.1, 0.1);
+    this.cameras.main.setBounds(-5000, 0, 10000, 540);
+
+    // ─── Suelo ────────────────────────────────────────────────────────
+    this.floor = this.physics.add.staticGroup();
+    this.floor.create(480, 540, null).setSize(10000, 20).setVisible(false);
+
+    // ─── Límites del mundo ────────────────────────────────────────────
+    this.physics.world.setBounds(-5000, -50, 10000, 540);
+    this.sakura.setCollideWorldBounds(true);
+    this.physics.add.collider(this.sakura, this.floor);
+
+    // ─── Controllers del jugador ──────────────────────────────────────
+    this.sakuraController = new SakuraController(this, this.sakura);
+    this.gamepadSystem = new GamepadSystem(this, this.sakuraController);
+
+    // ─── Sistemas de enemigos ─────────────────────────────────────────
+    this.enemySystem = new EnemySystem(this, this.sakura);
+    this.waveSystem = new WaveSystem(
+      this,
+      this.sakura,
+      this.enemySystem,
+      this.sakuraController
+    );
+
+    // ─── Animaciones ──────────────────────────────────────────────────
+    new SakuraAnims(this);
+    new SkeletonAnims(this);
+    new ShooterAnims(this);
+    new MorgansAnims(this);
+
+    // ─── HUD ──────────────────────────────────────────────────────────
+    this.createHealthBar();
+    this.flowers = 0;
+    this.coins = 0;
+    this.noFlowerDeaths = 0;
+    this.createResourceHUD();
+    this.ownedCards = [];
+
+    const rightXOwned = this.cameras.main.width - 24;
+    this.ownedCardsText = this.add.text(rightXOwned, 120, "Cartas: -", {
+      fontSize: "14px",
+      fill: "#ffffff",
+    });
+    this.ownedCardsText.setOrigin(1, 0).setScrollFactor(0).setDepth(150);
+
+    // ─── Pickups ──────────────────────────────────────────────────────
+    this.pickupsGroup = this.physics.add.group({
+      allowGravity: false,
+      immovable: true,
+    });
+    this.physics.add.overlap(
+      this.sakura,
+      this.pickupsGroup,
+      this.handlePickupOverlap,
+      null,
+      this
+    );
+
+    // ─── Tienda de cartas ─────────────────────────────────────────────
+    this.cardStore = new CardStore(this);
+    this.cards = {
+      coronaEspinas: false,
+      sakuraShuriken: false,
+      ritmoEterno: { enabled: false, lastUse: 0, cooldown: 30000 },
+      broteExplosivo: { enabled: false, counter: 0 },
+      bendicionSilvestre: { enabled: false, activeUntil: 0 },
+      semillaDorada: { enabled: false, flowerCount: 0 },
+      espirituAliado: { enabled: false },
+      vinculoEspiritual: { enabled: false },
+      florCarmesi: false,
+      luzEspectral: { enabled: false, activeUntil: 0, reduction: 0.95 },
+    };
+
+    // ─── Hazards (cartas AoE) ─────────────────────────────────────────
+    this.hazards = this.physics.add.group({ allowGravity: false });
+    this.physics.add.overlap(
+      this.hazards,
+      this.enemySystem.enemies,
+      (hazard, enemy) => {
+        if (enemy?.enemyController) enemy.enemyController.takeDamage();
+      }
+    );
+
+    // ─── UI de pausa ──────────────────────────────────────────────────
+    const pauseButton = this.add.text(900, 30, "Pausa", {
+      fontSize: "18px",
+      fill: "#000000",
+      backgroundColor: "#ffffff",
+    });
+    pauseButton
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(400)
+      .setPadding(8, 4, 8, 4);
+    pauseButton.setInteractive({ useHandCursor: true });
+    pauseButton.on("pointerdown", () => this.togglePause());
+
+    this.add
+      .text(820, 30, "Y: Tienda", { fontSize: "14px", fill: "#ffffff" })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(401);
+
+    const fsButton = this.add.text(760, 30, "Fullscreen", {
+      fontSize: "14px",
+      fill: "#ffffff",
+      backgroundColor: "#333333",
+    });
+    fsButton
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(401)
+      .setPadding(6, 4, 6, 4);
+    fsButton.setInteractive({ useHandCursor: true });
+    fsButton.on("pointerdown", () => {
+      if (this.scale?.startFullscreen) this.scale.startFullscreen();
+      else document.documentElement.requestFullscreen?.();
+      this.applyFullscreenCanvasScale();
+    });
+
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
+
+    this.pauseOverlay = this.add.rectangle(
+      centerX,
+      centerY,
+      this.cameras.main.width,
+      this.cameras.main.height,
+      0x000000,
+      0.5
+    );
+    this.pauseOverlay
+      .setScrollFactor(0)
+      .setDepth(500)
+      .setVisible(false)
+      .setInteractive();
+    this.pauseOverlay.on("pointerdown", () => this.togglePause());
+
+    this.pauseText = this.add.text(centerX, centerY - 20, "PAUSA", {
+      fontSize: "48px",
+      fill: "#ffffff",
+    });
+    this.pauseText
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(501)
+      .setVisible(false);
+
+    this.resumePrompt = this.add.text(
+      centerX,
+      centerY + 30,
+      "Presiona P o START para continuar",
+      { fontSize: "20px", fill: "#ffffff" }
+    );
+    this.resumePrompt
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(501)
+      .setVisible(false);
+
+    this.input.keyboard.on("keydown-P", () => this.togglePause());
+    this.input.keyboard.on("keydown-B", () => this.toggleStore());
+
+    // ─── Fullscreen listeners ─────────────────────────────────────────
+    const refreshScale = () => {
+      if (document.fullscreenElement || document.webkitFullscreenElement) {
+        this.applyFullscreenCanvasScale();
+      } else {
         const canvas = this.game?.canvas;
-        if (!canvas) return;
-        const zoom = Math.min(window.innerWidth / 960, window.innerHeight / 540);
-        canvas.style.transform       = `scale(${zoom})`;
-        canvas.style.transformOrigin = 'center center';
-    }
-
-    // ─── Mobile ───────────────────────────────────────────────────────────
-
-    setupMobileUI() {
-        this.mobileInput = { left: false, right: false };
-        const isPortrait = () => window.innerHeight > window.innerWidth;
-
-        this.orientationOverlay = this.add.text(
-            this.cameras.main.width / 2, this.cameras.main.height / 2,
-            'Gira tu teléfono a horizontal', { fontSize: '20px', fill: '#ffffff' }
-        ).setOrigin(0.5).setScrollFactor(0).setDepth(800);
-
-        this.createMobileButtons();
-
-        const updateVisibility = () => {
-            const portrait = isPortrait();
-            this.orientationOverlay.setVisible(this.isMobile && portrait);
-            this.mobileButtons.forEach(b => b.setVisible(this.isMobile && !portrait));
-        };
-        updateVisibility();
-        window.addEventListener('resize', updateVisibility);
-    }
-
-    createMobileButtons() {
-        this.mobileButtons = [];
-        const w = this.cameras.main.width;
-        const h = this.cameras.main.height;
-
-        const mk = (x, y, label, cb, hold = false) => {
-            const btn = this.add.rectangle(x, y, 80, 40, 0x222222).setStrokeStyle(2, 0xffffff);
-            const txt = this.add.text(x, y, label, { fontSize: '14px', fill: '#ffffff' }).setOrigin(0.5);
-            btn.setScrollFactor(0).setDepth(700);
-            txt.setScrollFactor(0).setDepth(701);
-            btn.setInteractive({ useHandCursor: true });
-            if (hold) {
-                btn.on('pointerdown', () => cb(true));
-                btn.on('pointerup',   () => cb(false));
-                btn.on('pointerout',  () => cb(false));
-            } else {
-                btn.on('pointerdown', cb);
-            }
-            this.mobileButtons.push(btn, txt);
-        };
-
-        mk(70,      h - 50,  '←',    v => this.mobileInput.left  = v, true);
-        mk(160,     h - 50,  '→',    v => this.mobileInput.right = v, true);
-        mk(w - 80,  h - 50,  'Jump', () => this.sakuraController.jump());
-        mk(w - 80,  h - 100, 'Atk',  () => this.sakuraController.attack());
-        mk(w - 80,  h - 150, 'Parry',() => this.sakuraController.parry());
-        mk(w - 160, h - 50,  'Dash', () => this.sakuraController.dash());
-    }
-
-    updateMobileUI() {
-        if (!this.isMobile) return;
-        if (window.innerHeight > window.innerWidth) return;
-        if (!this.sakuraController?.canMove || this.sakuraController.isDashing) return;
-
-        if (this.mobileInput.left) {
-            this.sakuraController.sakura.setVelocityX(-this.sakuraController.moveSpeed);
-            this.sakuraController.sakura.setFlipX(true);
-        } else if (this.mobileInput.right) {
-            this.sakuraController.sakura.setVelocityX(this.sakuraController.moveSpeed);
-            this.sakuraController.sakura.setFlipX(false);
+        if (canvas) {
+          canvas.style.transform = "none";
+          canvas.style.transformOrigin = "center center";
         }
+      }
+      this.scale?.refresh?.();
+    };
+    document.addEventListener("fullscreenchange", refreshScale);
+    document.addEventListener("webkitfullscreenchange", refreshScale);
+
+    // ─── Mobile ───────────────────────────────────────────────────────
+    this.setupMobileUI();
+  }
+
+  // ─── Health bar ───────────────────────────────────────────────────────
+
+  createHealthBar() {
+    this.healthBarBg = this.add.rectangle(100, 50, 200, 20, 0x000000);
+    this.healthBarBg.setScrollFactor(0).setDepth(100);
+
+    this.healthBar = this.add.rectangle(100, 50, 200, 20, 0xff0000);
+    this.healthBar.setScrollFactor(0).setDepth(101);
+
+    const cur = this.playerHealthSystem.getHealth();
+    const max = this.playerHealthSystem.getMaxHealth();
+    this.healthBar.width = 200 * (cur / max);
+
+    this.healthText = this.add.text(100, 80, `HP: ${cur}/${max}`, {
+      fontSize: "16px",
+      fill: "#ffffff",
+    });
+    this.healthText.setScrollFactor(0).setDepth(102);
+  }
+
+  updateHealthBar() {
+    const cur = this.playerHealthSystem.getHealth();
+    const max = this.playerHealthSystem.getMaxHealth();
+    this.healthBar.width = 200 * (cur / max);
+    this.healthText.setText(`HP: ${cur}/${max}`);
+  }
+
+  // ─── Resource HUD ─────────────────────────────────────────────────────
+
+  createResourceHUD() {
+    const rightX = this.cameras.main.width - 24;
+    this.comboText = this.add.text(rightX, 60, "Combo: 0 x1", {
+      fontSize: "16px",
+      fill: "#ffffff",
+    });
+    this.comboText.setOrigin(1, 0).setScrollFactor(0).setDepth(150);
+
+    this.flowersText = this.add.text(rightX, 80, `Flores: ${this.flowers}`, {
+      fontSize: "16px",
+      fill: "#ffffff",
+    });
+    this.flowersText.setOrigin(1, 0).setScrollFactor(0).setDepth(150);
+
+    this.coinsText = this.add.text(rightX, 100, `Monedas: ${this.coins}`, {
+      fontSize: "16px",
+      fill: "#ffffff",
+    });
+    this.coinsText.setOrigin(1, 0).setScrollFactor(0).setDepth(150);
+  }
+
+  collectResource(type, amount = 1) {
+    if (type === "flower") {
+      this.flowers += amount;
+      this.flowersText.setText(`Flores: ${this.flowers}`);
+      if (this.cards.semillaDorada.enabled) {
+        this.cards.semillaDorada.flowerCount += amount;
+        if (this.cards.semillaDorada.flowerCount >= 5) {
+          this.cards.semillaDorada.flowerCount -= 5;
+          this.collectResource("coin", 1);
+        }
+      }
+      if (this.cards.luzEspectral.enabled) {
+        this.cards.luzEspectral.activeUntil = this.time.now + 10000;
+      }
+      if (this.cards.broteExplosivo.enabled) {
+        this.cards.broteExplosivo.counter += amount;
+        if (this.cards.broteExplosivo.counter >= 10) {
+          this.cards.broteExplosivo.counter -= 10;
+          this.spawnExplosionAoE(this.sakura.x, this.sakura.y, 90);
+        }
+      }
+    } else if (type === "coin") {
+      this.coins += amount;
+      this.coinsText.setText(`Monedas: ${this.coins}`);
     }
+  }
+
+  updateComboUI(count, mult) {
+    this.comboText?.setText(`Combo: ${count} x${mult}`);
+  }
+
+  // ─── Drops ────────────────────────────────────────────────────────────
+
+  onEnemyDeath(enemy) {
+    const guaranteeFlower = this.noFlowerDeaths >= 10;
+    if (guaranteeFlower || Math.random() < 0.6) {
+      this.spawnPickup("flower", enemy.x, enemy.y);
+      this.noFlowerDeaths = 0;
+    } else {
+      this.noFlowerDeaths++;
+    }
+    if (Math.random() < 0.3) this.spawnPickup("coin", enemy.x, enemy.y);
+
+    if (this.cards.florCarmesi) {
+      const trail = this.add.rectangle(enemy.x, enemy.y, 60, 10, 0xff0000);
+      const zone = this.add.zone(enemy.x, enemy.y, 60, 10);
+      this.physics.add.existing(zone);
+      zone.body.setAllowGravity(false);
+      zone.visual = trail;
+      this.hazards.add(zone);
+      this.time.delayedCall(2000, () => {
+        if (zone.active) {
+          zone.visual?.destroy();
+          zone.destroy();
+        }
+      });
+    }
+
+    const isElite =
+      enemy.enemyData?.type === "Punisher" || enemy.enemyData?.type === "Grimm";
+    if (isElite) {
+      if (this.cards.bendicionSilvestre.enabled)
+        this.cards.bendicionSilvestre.activeUntil = this.time.now + 60000;
+      if (this.cards.espirituAliado.enabled && Math.random() < 0.1)
+        this.spawnAlly?.();
+    }
+  }
+
+  spawnPickup(type, x, y) {
+    const size = 16;
+    const zone = this.add.zone(x, y, size, size);
+    this.physics.add.existing(zone);
+    zone.body.setAllowGravity(false).setImmovable(true);
+    zone.pickupType = type;
+
+    const color = type === "flower" ? 0xff66cc : 0xffd700;
+    const rect = this.add.rectangle(x, y, size, size, color).setDepth(140);
+    zone.visual = rect;
+    this.pickupsGroup.add(zone);
+
+    this.time.delayedCall(15000, () => {
+      if (zone.active) this.pickupsGroup.remove(zone, true, true);
+      if (rect?.active) rect.destroy();
+    });
+  }
+
+  handlePickupOverlap(player, zone) {
+    if (!zone.pickupType) return;
+    this.collectResource(zone.pickupType, 1);
+    zone.visual?.destroy();
+    this.pickupsGroup.remove(zone, true, true);
+  }
+
+  // ─── Tienda ───────────────────────────────────────────────────────────
+
+  toggleStore() {
+    if (this.isPlayerDead) return;
+    if (this.isStoreOpen) {
+      this.closeStore();
+      return;
+    }
+
+    const nearEnemy = this.enemySystem.enemies.some(
+      (e) =>
+        Phaser.Math.Distance.Between(e.x, e.y, this.sakura.x, this.sakura.y) <
+        120
+    );
+    if (nearEnemy) {
+      const warn = this.add
+        .text(480, 100, "No puedes abrir la tienda en combate", {
+          fontSize: "18px",
+          fill: "#ff6666",
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(600);
+      this.time.delayedCall(1200, () => warn.destroy());
+      return;
+    }
+    this.openStore();
+  }
+
+  openStore() {
+    this.isStoreOpen = true;
+    this.physics.pause();
+    this.sakura?.anims.pause();
+    this.enemySystem.enemies.forEach((e) => e.anims?.pause());
+
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
+
+    this.storeOverlay = this.add.rectangle(
+      centerX,
+      centerY,
+      this.cameras.main.width,
+      this.cameras.main.height,
+      0x000000,
+      0.7
+    );
+    this.storeOverlay.setScrollFactor(0).setDepth(700).setInteractive();
+    this.storeOverlay.on("pointerdown", () => this.closeStore());
+
+    const offers = this.cardStore.rollOffers();
+    this.renderStoreUI(offers, centerX, centerY);
+
+    this.storeKeys = this.input.keyboard.addKeys({
+      one: Phaser.Input.Keyboard.KeyCodes.ONE,
+      two: Phaser.Input.Keyboard.KeyCodes.TWO,
+      three: Phaser.Input.Keyboard.KeyCodes.THREE,
+      r: Phaser.Input.Keyboard.KeyCodes.R,
+    });
+    this.storeKeys.one.on("down", () => this.purchaseCard(0));
+    this.storeKeys.two.on("down", () => this.purchaseCard(1));
+    this.storeKeys.three.on("down", () => this.purchaseCard(2));
+    this.storeKeys.r.on("down", () => this.rerollStore());
+
+    this.gamepadSystem?.onStoreOpen();
+  }
+
+  closeStore() {
+    this.isStoreOpen = false;
+    this.physics.resume();
+    this.sakura?.anims.resume();
+    this.enemySystem.enemies.forEach((e) => e.anims?.resume());
+
+    this.storeOverlay?.destroy();
+    this.clearStoreUI();
+
+    if (this.storeKeys) {
+      this.storeKeys.one.destroy();
+      this.storeKeys.two.destroy();
+      this.storeKeys.three.destroy();
+      this.storeKeys.r.destroy();
+      this.storeKeys = null;
+    }
+    this.gamepadSystem?.onStoreClose();
+  }
+
+  purchaseCard(index) {
+    const ok = this.cardStore.purchase(index);
+    if (!ok) {
+      const warn = this.add
+        .text(480, 120, "No tienes suficientes flores", {
+          fontSize: "18px",
+          fill: "#ff6666",
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(702);
+      this.time.delayedCall(1200, () => warn.destroy());
+      return;
+    }
+    const card = this.cardStore.offers[index];
+    if (card) {
+      this.ownedCards.push(card.name);
+      this.refreshOwnedCardsUI();
+    }
+    this.closeStore();
+  }
+
+  rerollStore() {
+    if (this.coins < 3) {
+      const warn = this.add
+        .text(480, 120, "No tienes suficientes monedas", {
+          fontSize: "18px",
+          fill: "#ff6666",
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(702);
+      this.time.delayedCall(1200, () => warn.destroy());
+      return;
+    }
+    this.coins -= 3;
+    this.coinsText.setText(`Monedas: ${this.coins}`);
+    this.clearStoreUI();
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
+    this.renderStoreUI(this.cardStore.rollOffers(), centerX, centerY);
+    this.gamepadSystem?.onStoreOpen();
+  }
+
+  renderStoreUI(offers, centerX, centerY) {
+    this.storeUI = [];
+    const header = this.add.text(
+      centerX,
+      centerY - 150,
+      `Tienda de Cartas\nFlores: ${this.flowers}  Monedas: ${this.coins}`,
+      { fontSize: "20px", fill: "#ffffff", align: "center" }
+    );
+    header.setOrigin(0.5).setScrollFactor(0).setDepth(701);
+    this.storeUI.push(header);
+
+    const positions = [-200, 0, 200];
+    offers.forEach((card, i) => {
+      const x = centerX + positions[i];
+      const y = centerY;
+      const color = this.cardStore.getRarityColor(card.rarity);
+
+      const bg = this.add
+        .rectangle(x, y, 180, 220, 0x111111, 0.9)
+        .setStrokeStyle(3, color);
+      bg.setScrollFactor(0).setDepth(701).setInteractive();
+      bg.on("pointerdown", () => this.purchaseCard(i));
+
+      const title = this.add
+        .text(x, y + 130, card.name, {
+          fontSize: "18px",
+          fill: "#ffffff",
+          align: "center",
+          wordWrap: { width: 200 },
+        })
+        .setOrigin(0.5, 0)
+        .setScrollFactor(0)
+        .setDepth(702);
+
+      const sub = this.add
+        .text(x, y + 152, `[${card.rarity}] - ${card.cost} flores`, {
+          fontSize: "14px",
+          fill: "#cccccc",
+          align: "center",
+        })
+        .setOrigin(0.5, 0)
+        .setScrollFactor(0)
+        .setDepth(702);
+
+      const desc = this.add
+        .text(x, y + 175, card.desc, {
+          fontSize: "14px",
+          fill: "#dddddd",
+          align: "center",
+          wordWrap: { width: 220 },
+        })
+        .setOrigin(0.5, 0)
+        .setScrollFactor(0)
+        .setDepth(702);
+
+      const key = this.add
+        .text(x, y + 205, `Pulsa ${i + 1}`, {
+          fontSize: "16px",
+          fill: "#ffffff",
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(702);
+
+      this.storeUI.push(bg, title, sub, desc, key);
+    });
+
+    const reroll = this.add.text(
+      centerX,
+      centerY + 240,
+      "Re-roll: 3 monedas (R / X)  |  Cerrar: B",
+      { fontSize: "16px", fill: "#ffffff" }
+    );
+    reroll.setOrigin(0.5).setScrollFactor(0).setDepth(701);
+    this.storeUI.push(reroll);
+  }
+
+  clearStoreUI() {
+    this.storeUI?.forEach((el) => el?.destroy());
+    this.storeUI = null;
+  }
+
+  refreshOwnedCardsUI() {
+    const list = this.ownedCards.length ? this.ownedCards.join(", ") : "-";
+    this.ownedCardsText?.setText(`Cartas: ${list}`);
+  }
+
+  // ─── Cartas ───────────────────────────────────────────────────────────
+
+  applyCard(name) {
+    if (name === "Corona de espinas") {
+      this.cards.coronaEspinas = true;
+      if (!this.thornsTimer) {
+        this.thornsTimer = this.time.addEvent({
+          delay: 3000,
+          loop: true,
+          callback: () =>
+            this.spawnExplosionAoE(this.sakura.x, this.sakura.y, 60),
+        });
+      }
+    } else if (name === "Sakura Shuriken") {
+      this.cards.sakuraShuriken = true;
+      if (!this.shurikenTimer) {
+        this.shurikenTimer = this.time.addEvent({
+          delay: 2000,
+          loop: true,
+          callback: () => this.spawnPlayerProjectile(),
+        });
+      }
+    } else if (name === "Ritmo eterno") {
+      this.cards.ritmoEterno.enabled = true;
+    } else if (name === "Brote explosivo") {
+      this.cards.broteExplosivo.enabled = true;
+    } else if (name === "Bendición silvestre") {
+      this.cards.bendicionSilvestre.enabled = true;
+    } else if (name === "Semilla dorada") {
+      this.cards.semillaDorada.enabled = true;
+    } else if (name === "Espíritu aliado") {
+      this.cards.espirituAliado.enabled = true;
+    } else if (name === "Vínculo espiritual") {
+      this.cards.vinculoEspiritual.enabled = true;
+    } else if (name === "Flor Carmesí") {
+      this.cards.florCarmesi = true;
+    } else if (name === "Luz espectral") {
+      this.cards.luzEspectral.enabled = true;
+    }
+  }
+
+  spawnExplosionAoE(x, y, radius) {
+    const zone = this.add.zone(x, y, radius * 2, radius * 2);
+    this.physics.add.existing(zone);
+    zone.body.setAllowGravity(false);
+    this.enemySystem?.enemies.forEach((enemy) => {
+      if (enemy?.active && this.physics.overlap(zone, enemy)) {
+        enemy.enemyController?.takeDamage();
+      }
+    });
+    this.time.delayedCall(50, () => zone.destroy());
+  }
+
+  spawnPlayerProjectile() {
+    if (!this.enemySystem || this.enemySystem.enemies.length === 0) return;
+    const target = this.enemySystem.enemies.reduce((best, e) => {
+      if (!best) return e;
+      const d = Phaser.Math.Distance.Between(
+        this.sakura.x,
+        this.sakura.y,
+        e.x,
+        e.y
+      );
+      const db = Phaser.Math.Distance.Between(
+        this.sakura.x,
+        this.sakura.y,
+        best.x,
+        best.y
+      );
+      return d < db ? e : best;
+    }, null);
+    if (!target) return;
+
+    const bullet = this.add.rectangle(
+      this.sakura.x,
+      this.sakura.y - 20,
+      6,
+      6,
+      0x66ccff
+    );
+    const zone = this.add.zone(bullet.x, bullet.y, 6, 6);
+    this.physics.add.existing(zone);
+    zone.body.setAllowGravity(false);
+    const angle = Phaser.Math.Angle.Between(zone.x, zone.y, target.x, target.y);
+    zone.body.setVelocity(Math.cos(angle) * 300, Math.sin(angle) * 300);
+    zone.visual = bullet;
+
+    this.time.addEvent({
+      delay: 16,
+      loop: true,
+      callback: () => {
+        if (!zone.active) return;
+        bullet.x = zone.x;
+        bullet.y = zone.y;
+        if (this.physics.overlap(zone, target)) {
+          target.enemyController?.takeDamage();
+          bullet.destroy();
+          zone.destroy();
+        }
+      },
+    });
+    this.time.delayedCall(3000, () => {
+      if (zone.active) {
+        bullet.destroy();
+        zone.destroy();
+      }
+    });
+  }
+
+  // ─── Daño al jugador ─────────────────────────────────────────────────
+
+  handlePlayerDamage(amount) {
+    if (this.isPlayerDead) return;
+
+    if (
+      this.cards.luzEspectral.enabled &&
+      this.cards.luzEspectral.activeUntil > this.time.now
+    ) {
+      amount = Math.floor(amount * this.cards.luzEspectral.reduction);
+    }
+
+    this.playerHealthSystem.applyDamage(amount);
+    this.updateHealthBar();
+
+    const resetCombo = () => this.sakuraController?.resetCombo?.();
+    if (this.cards.ritmoEterno.enabled) {
+      const now = this.time.now;
+      if (
+        now - this.cards.ritmoEterno.lastUse >=
+        this.cards.ritmoEterno.cooldown
+      ) {
+        this.cards.ritmoEterno.lastUse = now;
+        resetCombo();
+      }
+    } else {
+      resetCombo();
+    }
+
+    if (this.sakura?.anims && !this.isPlayerDead) {
+      this.sakura.anims.stop();
+      this.sakura.anims.play("sakura-hurt", true);
+    }
+
+    if (this.playerHealthSystem.isDead()) this.playerDeath();
+  }
+
+  playerDeath() {
+    this.isPlayerDead = true;
+    this.sakuraController?.setDead(true);
+
+    if (this.sakura?.anims) {
+      this.sakura.anims.stop();
+      this.sakura.anims.play("sakura-death", true);
+      this.sakuraController?.setCanMove(false);
+
+      this.time.delayedCall(1000, () => {
+        this.physics.pause();
+
+        this.add
+          .text(400, 270, "GAME OVER", {
+            fontSize: "64px",
+            fill: "#ff0000",
+            fontStyle: "bold",
+          })
+          .setOrigin(0.5)
+          .setScrollFactor(0)
+          .setDepth(200);
+
+        this.add
+          .text(400, 320, "Presiona R para reiniciar", {
+            fontSize: "24px",
+            fill: "#ffffff",
+          })
+          .setOrigin(0.5)
+          .setScrollFactor(0)
+          .setDepth(201);
+
+        this.input.keyboard.once("keydown-R", () => this.scene.restart());
+      });
+    }
+  }
+
+  // ─── Colisión jugador-enemigo ─────────────────────────────────────────
+
+  handleEnemyCollision(sakura, enemy) {
+    enemy.setVelocityX(0);
+    if (enemy.enemyController) {
+      enemy.setFlipX(enemy.x > sakura.x);
+    }
+  }
+
+  // ─── Pausa ────────────────────────────────────────────────────────────
+
+  togglePause() {
+    if (this.isPlayerDead) return;
+    this.isPaused = !this.isPaused;
+
+    if (this.isPaused) {
+      this.physics.pause();
+      this.sakura?.anims.pause();
+      this.enemySystem?.enemies.forEach((e) => e.anims?.pause());
+      this.pauseOverlay.setVisible(true);
+      this.pauseText.setVisible(true);
+      this.resumePrompt.setVisible(true);
+    } else {
+      this.physics.resume();
+      this.sakura?.anims.resume();
+      this.enemySystem?.enemies.forEach((e) => e.anims?.resume());
+      this.pauseOverlay.setVisible(false);
+      this.pauseText.setVisible(false);
+      this.resumePrompt.setVisible(false);
+    }
+  }
+
+  // ─── Update ───────────────────────────────────────────────────────────
+
+  update(time, delta) {
+    if (this.isPlayerDead || this.isPaused || this.isStoreOpen) {
+      this.gamepadSystem?.update();
+      return;
+    }
+
+    this.waveSystem?.update(delta);
+    this.backgroundManager.update();
+    this.sakuraController.update();
+    this.gamepadSystem?.update();
+    this.enemySystem?.update();
+    this.updateMobileUI();
+  }
+
+  // ─── Fullscreen ───────────────────────────────────────────────────────
+
+  applyFullscreenCanvasScale() {
+    const canvas = this.game?.canvas;
+    if (!canvas) return;
+    const zoom = Math.min(window.innerWidth / 960, window.innerHeight / 540);
+    canvas.style.transform = `scale(${zoom})`;
+    canvas.style.transformOrigin = "center center";
+  }
+
+  // ─── Mobile ───────────────────────────────────────────────────────────
+
+  setupMobileUI() {
+    this.mobileInput = { left: false, right: false };
+    const isPortrait = () => window.innerHeight > window.innerWidth;
+
+    this.orientationOverlay = this.add
+      .text(
+        this.cameras.main.width / 2,
+        this.cameras.main.height / 2,
+        "Gira tu teléfono a horizontal",
+        { fontSize: "20px", fill: "#ffffff" }
+      )
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(800);
+
+    this.createMobileButtons();
+
+    const updateVisibility = () => {
+      const portrait = isPortrait();
+      this.orientationOverlay.setVisible(this.isMobile && portrait);
+      this.mobileButtons.forEach((b) =>
+        b.setVisible(this.isMobile && !portrait)
+      );
+    };
+    updateVisibility();
+    window.addEventListener("resize", updateVisibility);
+  }
+
+  createMobileButtons() {
+    this.mobileButtons = [];
+    const w = this.cameras.main.width;
+    const h = this.cameras.main.height;
+
+    const mk = (x, y, label, cb, hold = false) => {
+      const btn = this.add
+        .rectangle(x, y, 80, 40, 0x222222)
+        .setStrokeStyle(2, 0xffffff);
+      const txt = this.add
+        .text(x, y, label, { fontSize: "14px", fill: "#ffffff" })
+        .setOrigin(0.5);
+      btn.setScrollFactor(0).setDepth(700);
+      txt.setScrollFactor(0).setDepth(701);
+      btn.setInteractive({ useHandCursor: true });
+      if (hold) {
+        btn.on("pointerdown", () => cb(true));
+        btn.on("pointerup", () => cb(false));
+        btn.on("pointerout", () => cb(false));
+      } else {
+        btn.on("pointerdown", cb);
+      }
+      this.mobileButtons.push(btn, txt);
+    };
+
+    mk(70, h - 50, "←", (v) => (this.mobileInput.left = v), true);
+    mk(160, h - 50, "→", (v) => (this.mobileInput.right = v), true);
+    mk(w - 80, h - 50, "Jump", () => this.sakuraController.jump());
+    mk(w - 80, h - 100, "Atk", () => this.sakuraController.attack());
+    mk(w - 80, h - 150, "Parry", () => this.sakuraController.parry());
+    mk(w - 160, h - 50, "Dash", () => this.sakuraController.dash());
+  }
+
+  updateMobileUI() {
+    if (!this.isMobile) return;
+    if (window.innerHeight > window.innerWidth) return;
+    if (!this.sakuraController?.canMove || this.sakuraController.isDashing)
+      return;
+
+    if (this.mobileInput.left) {
+      this.sakuraController.sakura.setVelocityX(
+        -this.sakuraController.moveSpeed
+      );
+      this.sakuraController.sakura.setFlipX(true);
+    } else if (this.mobileInput.right) {
+      this.sakuraController.sakura.setVelocityX(
+        this.sakuraController.moveSpeed
+      );
+      this.sakuraController.sakura.setFlipX(false);
+    }
+  }
 }
 
 export default GameScene;

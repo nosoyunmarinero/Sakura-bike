@@ -1,209 +1,202 @@
-import HealthSystem from '../systems/HealthSystem';
+import HealthSystem from "../systems/HealthSystem.js";
 
 export default class BaseEnemy {
-    constructor(scene, enemy, player, config = {}) {
-        this.scene  = scene;
-        this.enemy  = enemy;
-        this.player = player;
+  constructor(scene, enemy, player, config = {}) {
+    this.scene = scene;
+    this.enemy = enemy;
+    this.player = player;
 
-        // ─── Estado ───────────────────────────────────────────────────────
-        this.isHurt = false;
-        this.isDead = false;
+    this.isHurt = false;
+    this.isDead = false;
+    this.isAttacking = false;
 
-        // ─── Config con defaults ──────────────────────────────────────────
-        this.maxHp              = config.maxHp              ?? 30;
-        this.attackDamage       = config.attackDamage       ?? 10;
-        this.speed              = config.speed              ?? 100;
-        this.attackRange        = config.attackRange        ?? 70;
-        this.attackCooldown     = config.attackCooldown     ?? 800;
-        this.postDamageCooldown = config.postDamageCooldown ?? 1000;
-        this.hurtDuration       = config.hurtDuration       ?? 300;
-        this.knockbackSpeed     = config.knockbackSpeed     ?? 80;
-        this.deathDelay         = config.deathDelay         ?? 1500;
+    this.maxHp = config.maxHp ?? 30;
+    this.attackDamage = config.attackDamage ?? 10;
+    this.speed = config.speed ?? 100;
+    this.attackRange = config.attackRange ?? 70;
+    this.attackCooldown = config.attackCooldown ?? 800;
+    this.postDamageCooldown = config.postDamageCooldown ?? 1000;
+    this.hurtDuration = config.hurtDuration ?? 300;
+    this.knockbackSpeed = config.knockbackSpeed ?? 80;
+    this.deathDelay = config.deathDelay ?? 1500;
 
-        // Tiempo del último ataque (cada instancia lo lleva independiente)
-        this.lastAttackTime = 0;
+    this.lastAttackTime = 0;
 
-        // ─── Sistema de salud ─────────────────────────────────────────────
-        this.healthSystem = new HealthSystem(scene, enemy, this.maxHp);
-        this.healthSystem.onDeath.on('death', () => this.die());
+    this.healthSystem = new HealthSystem(scene, enemy, this.maxHp);
+    this.healthSystem.onDeath.on("death", () => this.die());
 
-        // Sincronizar attackDamage en enemyData para que EnemySystem lo lea
-        if (enemy.enemyData) {
-            enemy.enemyData.attackDamage  = this.attackDamage;
-            enemy.enemyData.lastAttackTime = 0;
-            enemy.enemyData.postDamageTime = 0;
-            enemy.enemyData.isAttacking    = false;
+    if (enemy.enemyData) {
+      enemy.enemyData.attackDamage = this.attackDamage;
+      enemy.enemyData.lastAttackTime = 0;
+      enemy.enemyData.postDamageTime = 0;
+      enemy.enemyData.isAttacking = false;
+    }
+
+    enemy.healthSystem = this.healthSystem;
+    enemy.enemyController = this;
+  }
+
+  update() {
+    if (this.isDead || this.isHurt || this.isAttacking) return false;
+    return true;
+  }
+
+  distanceToPlayer() {
+    return Phaser.Math.Distance.Between(
+      this.enemy.x,
+      this.enemy.y,
+      this.player.x,
+      this.player.y
+    );
+  }
+
+  directionToPlayer() {
+    return this.player.x - this.enemy.x;
+  }
+
+  facePlayer() {
+    this.enemy.setFlipX(this.player.x < this.enemy.x);
+  }
+
+  takeDamage(amount = 10) {
+    if (this.isHurt || this.isDead) return;
+
+    const died = this.healthSystem.applyDamage(amount);
+    if (died) return;
+
+    this.isHurt = true;
+
+    if (this.enemy.enemyData) {
+      this.enemy.enemyData.postDamageTime = this.scene.time.now;
+    }
+
+    const dir = this.enemy.x < this.player.x ? -1 : 1;
+    this.enemy.setVelocityX(dir * this.knockbackSpeed);
+    this.playAnim("hurt");
+
+    this.scene.time.delayedCall(this.hurtDuration, () => {
+      this.isHurt = false;
+      if (!this.isDead) this.playAnim("idle");
+    });
+  }
+
+  die() {
+    if (this.isDead) return;
+
+    this.isDead = true;
+    this.isHurt = false;
+    this.isAttacking = false;
+    this.enemy.setVelocityX(0);
+    this.enemy.body.enable = false;
+
+    if (this.enemy.hpBar) {
+      this.enemy.hpBar.width = 0;
+      this.enemy.hpBar.x = this.enemy.x - 25;
+    }
+
+    this.playAnim("death");
+    this.scene.onEnemyDeath?.(this.enemy);
+
+    this.scene.time.delayedCall(this.deathDelay, () => {
+      this.scene.enemySystem?.removeEnemy(this.enemy);
+    });
+  }
+
+  canAttack() {
+    const now = this.scene.time.now;
+    const postDmg = this.enemy.enemyData?.postDamageTime ?? 0;
+    if (now - postDmg < this.postDamageCooldown) return false;
+    if (now - this.lastAttackTime < this.attackCooldown) return false;
+    return true;
+  }
+
+  // Llama esto al inicio del ataque — bloquea hasta que termina el cooldown completo
+  registerAttack() {
+    this.lastAttackTime = this.scene.time.now;
+    this.isAttacking = true;
+
+    if (this.enemy.enemyData) this.enemy.enemyData.isAttacking = true;
+
+    // Liberar solo cuando el cooldown completo haya pasado
+    this.scene.time.delayedCall(this.attackCooldown, () => {
+      this.isAttacking = false;
+      if (this.enemy.enemyData) this.enemy.enemyData.isAttacking = false;
+    });
+  }
+
+  playAnim(state) {
+    const key = this.anims?.[state];
+    if (key && this.enemy.anims) {
+      this.enemy.anims.play(key, true);
+    }
+  }
+
+  moveTowardsPlayer() {
+    const dir = this.directionToPlayer();
+    if (Math.abs(dir) > 5) {
+      this.enemy.setVelocityX(dir > 0 ? this.speed : -this.speed);
+      this.enemy.setFlipX(dir < 0);
+      this.playAnim("walk");
+    } else {
+      this.enemy.setVelocityX(0);
+      this.playAnim("idle");
+    }
+  }
+
+  moveAwayFromPlayer() {
+    const dir = this.directionToPlayer();
+    const fleeDir = dir > 0 ? -1 : 1;
+    this.enemy.setVelocityX(fleeDir * this.speed);
+    this.enemy.setFlipX(dir < 0);
+    this.playAnim("walk");
+  }
+
+  idle() {
+    this.enemy.setVelocityX(0);
+    this.facePlayer();
+    this.playAnim("idle");
+  }
+
+  // delay: ms a esperar antes de aplicar el daño (para sincronizar con la animación)
+  // damageWindow: ms que la zona permanece activa (golpe puede conectar en ese rango)
+  createMeleeZone(
+    width = 40,
+    height = 40,
+    range = 20,
+    delay = 0,
+    damageWindow = 150
+  ) {
+    this.scene.time.delayedCall(delay, () => {
+      if (this.isDead) return;
+
+      const dir = this.player.x > this.enemy.x ? 1 : -1;
+      const zx = this.enemy.x + dir * range;
+      const zy = this.enemy.y - 20;
+
+      const zone = this.scene.add.zone(zx, zy, width, height);
+      this.scene.physics.add.existing(zone);
+      zone.body.setAllowGravity(false);
+
+      let hit = false; // Solo un golpe por zona
+
+      const controller = this.scene.sakuraController;
+      const parryHit =
+        controller?.parryActive &&
+        this.scene.physics.overlap(zone, controller.parryZone);
+
+      if (parryHit) {
+        this.scene.enemySystem?.knockbackEnemiesAround();
+        if (this.scene.playerHealthSystem?.heal) {
+          this.scene.playerHealthSystem.heal(20);
+          this.scene.updateHealthBar?.();
         }
+        hit = true;
+      } else if (!hit && this.scene.physics.overlap(zone, this.player)) {
+        this.scene.enemySystem?.damagePlayer(this.enemy);
+        hit = true;
+      }
 
-        // Exponer healthSystem en el sprite para que EnemySystem actualice la HP bar
-        enemy.healthSystem    = this.healthSystem;
-        enemy.enemyController = this;
-    }
-
-    // ─── Update (cada subclase llama super.update() si quiere los guards) ─
-
-    update() {
-        if (this.isDead || this.isHurt) return false; // false = no continuar
-        return true; // true = ok para procesar comportamiento
-    }
-
-    // ─── Distancia al jugador ─────────────────────────────────────────────
-
-    distanceToPlayer() {
-        return Phaser.Math.Distance.Between(
-            this.enemy.x, this.enemy.y,
-            this.player.x, this.player.y
-        );
-    }
-
-    directionToPlayer() {
-        return this.player.x - this.enemy.x;
-    }
-
-    facePlayer() {
-        this.enemy.setFlipX(this.player.x < this.enemy.x);
-    }
-
-    // ─── Recibir daño ─────────────────────────────────────────────────────
-
-    takeDamage() {
-        if (this.isHurt || this.isDead) return;
-
-        const died = this.healthSystem.takeDamage();
-        if (died) return;
-
-        this.isHurt = true;
-
-        if (this.enemy.enemyData) {
-            this.enemy.enemyData.postDamageTime = this.scene.time.now;
-        }
-
-        // Knockback alejándose del jugador
-        const dir = this.enemy.x < this.player.x ? -1 : 1;
-        this.enemy.setVelocityX(dir * this.knockbackSpeed);
-
-        this.playAnim('hurt');
-
-        this.scene.time.delayedCall(this.hurtDuration, () => {
-            this.isHurt = false;
-            if (!this.isDead) this.playAnim('idle');
-        });
-    }
-
-    // ─── Muerte ───────────────────────────────────────────────────────────
-
-    die() {
-        if (this.isDead) return;
-
-        this.isDead = true;
-        this.isHurt = false;
-        this.enemy.setVelocityX(0);
-        this.enemy.body.enable = false;
-
-        // Colapsar HP bar visualmente
-        if (this.enemy.hpBar) {
-            this.enemy.hpBar.width = 0;
-            this.enemy.hpBar.x = this.enemy.x - 25;
-        }
-
-        this.playAnim('death');
-
-        // Notificar a la escena (drops, oleadas, etc.)
-        this.scene.onEnemyDeath?.(this.enemy);
-
-        // Eliminar del sistema tras la animación
-        this.scene.time.delayedCall(this.deathDelay, () => {
-            this.scene.enemySystem?.removeEnemy(this.enemy);
-        });
-    }
-
-    // ─── Cooldown de ataque ───────────────────────────────────────────────
-
-    canAttack() {
-        const now = this.scene.time.now;
-        const postDmg = this.enemy.enemyData?.postDamageTime ?? 0;
-        if (now - postDmg < this.postDamageCooldown) return false;
-        if (now - this.lastAttackTime < this.attackCooldown) return false;
-        return true;
-    }
-
-    registerAttack() {
-        this.lastAttackTime = this.scene.time.now;
-        if (this.enemy.enemyData) this.enemy.enemyData.isAttacking = true;
-
-        this.scene.time.delayedCall(300, () => {
-            if (this.enemy.enemyData) this.enemy.enemyData.isAttacking = false;
-        });
-    }
-
-    // ─── Animaciones ──────────────────────────────────────────────────────
-    // Cada subclase define this.anims = { idle, walk, attack, hurt, death }
-
-    playAnim(state) {
-        const key = this.anims?.[state];
-        if (key && this.enemy.anims) {
-            this.enemy.anims.play(key, true);
-        }
-    }
-
-    // ─── Movimiento básico hacia el jugador ───────────────────────────────
-
-    moveTowardsPlayer() {
-        const dir = this.directionToPlayer();
-        if (Math.abs(dir) > 5) {
-            this.enemy.setVelocityX(dir > 0 ? this.speed : -this.speed);
-            this.enemy.setFlipX(dir < 0);
-            this.playAnim('walk');
-        } else {
-            this.enemy.setVelocityX(0);
-            this.playAnim('idle');
-        }
-    }
-
-    // ─── Movimiento alejándose del jugador (ranged) ───────────────────────
-
-    moveAwayFromPlayer() {
-        const dir = this.directionToPlayer();
-        const fleeDir = dir > 0 ? -1 : 1;
-        this.enemy.setVelocityX(fleeDir * this.speed);
-        this.enemy.setFlipX(dir < 0);
-        this.playAnim('walk');
-    }
-
-    // ─── Idle ─────────────────────────────────────────────────────────────
-
-    idle() {
-        this.enemy.setVelocityX(0);
-        this.facePlayer();
-        this.playAnim('idle');
-    }
-
-    // ─── Zona de ataque melee ─────────────────────────────────────────────
-
-    createMeleeZone(width = 50, height = 40, range = 30) {
-        const dir = this.enemy.flipX ? -1 : 1;
-        const zx  = this.enemy.x + dir * range;
-        const zy  = this.enemy.y - 20;
-
-        const zone = this.scene.add.zone(zx, zy, width, height);
-        this.scene.physics.add.existing(zone);
-        zone.body.setAllowGravity(false);
-
-        const controller = this.scene.sakuraController;
-        const parryHit   = controller?.parryActive &&
-            this.scene.physics.overlap(zone, controller.parryZone);
-
-        if (parryHit) {
-            this.scene.enemySystem?.knockbackEnemiesAround();
-            if (this.scene.playerHealthSystem?.heal) {
-                this.scene.playerHealthSystem.heal(20);
-                this.scene.updateHealthBar?.();
-            }
-        } else if (this.scene.physics.overlap(zone, this.player)) {
-            this.scene.enemySystem?.damagePlayer(this.enemy);
-        }
-
-        this.scene.time.delayedCall(100, () => zone.destroy());
-    }
+      this.scene.time.delayedCall(damageWindow, () => zone.destroy());
+    });
+  }
 }
