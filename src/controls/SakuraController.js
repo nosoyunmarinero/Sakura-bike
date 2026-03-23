@@ -47,6 +47,10 @@ export default class SakuraController {
         this.parryPerfectMs = 80;
         this.parryCooldownMs = 800;
         this.lastParryTime = 0;
+        this.parryZone = this.scene.add.zone(0, 0, 40, 60);
+        this.scene.physics.add.existing(this.parryZone);
+        this.parryZone.body.setAllowGravity(false);
+        this.parryZone.setVisible(false);
         
         this.setupControls();
         this.setState('normal');
@@ -75,6 +79,9 @@ export default class SakuraController {
 
         // 🔥 ACTUALIZAR EL SISTEMA DE ATAQUE CADA FRAME (IMPORTANTE!)
         this.attackSystem.update();
+        const dir = this.sakura.flipX ? -1 : 1;
+        this.parryZone.x = this.sakura.x + dir * 30;
+        this.parryZone.y = this.sakura.y - 20;
 
         // 🔥 APLICAR ESTADO ACTUAL CADA FRAME
         if (this.isAttacking) {

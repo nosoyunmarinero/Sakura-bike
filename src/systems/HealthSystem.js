@@ -107,4 +107,15 @@ export default class HealthSystem {
     isAboutToDie() {
         return this.hitCount >= this.hitsToDie - 1;
     }
+
+    // 🔥 NUEVO: Aplicar daño directo (por cantidad de daño)
+    applyDamage(amount = 0) {
+        if (!this.isAlive || this.isInvulnerable) return false;
+        this.currentHealth = Math.max(0, this.currentHealth - amount);
+        if (this.currentHealth <= 0) {
+            this.die();
+            return true;
+        }
+        return false;
+    }
 }

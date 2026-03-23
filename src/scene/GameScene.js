@@ -6,6 +6,7 @@ import SakuraAnims from '../anims/SakuraAnims.js';
 import EnemyAnims from '../anims/EnemyAnims.js';
 import BackgroundManager from '../background/brackgroundManager.js';
 import HealthSystem from '../systems/HealthSystem.js';
+import CardStore from '../systems/CardStore.js';
 
 class GameScene extends Phaser.Scene {
     constructor() {
@@ -21,6 +22,7 @@ class GameScene extends Phaser.Scene {
         this.isPlayerDead = false;
         this.isPaused = false;
         this.isStoreOpen = false;
+        this.isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
         
         // Configurar gravedad
         this.physics.world.gravity.y = 800;
@@ -47,8 +49,8 @@ class GameScene extends Phaser.Scene {
         this.sakura.body.setSize(25, 30);
         this.sakura.body.setOffset(10, 10);
         
-        // 🔥 SISTEMA DE SALUD DEL JUGADOR (10 golpes para morir)
-        this.playerHealthSystem = new HealthSystem(this, this.sakura, 10);
+        // 🔥 SISTEMA DE SALUD DEL JUGADOR (100 HP)
+        this.playerHealthSystem = new HealthSystem(this, this.sakura, 100);
 
         // Configurar cámara
         this.cameras.main.startFollow(this.sakura);
@@ -62,6 +64,7 @@ class GameScene extends Phaser.Scene {
         this.enemy.anims.play('enemy_idle', true);
         this.enemy.body.setSize(40, 70);
         this.enemy.body.setOffset(25, 15);
+        this.enemy.enemyData = { type: 'Skeleton', attackDamage: 10, speed: 100, attackType: 'melee' };
         
         // 🔥 CREAR EL SUELO PRIMERO
         this.floor = this.physics.add.staticGroup();
@@ -109,8 +112,31 @@ class GameScene extends Phaser.Scene {
         this.coins = 0;
         this.noFlowerDeaths = 0;
         this.createResourceHUD();
+        this.ownedCards = [];
+        const rightXOwned = this.cameras.main.width - 24;
+        this.ownedCardsText = this.add.text(rightXOwned, 120, 'Cartas: -', { fontSize: '14px', fill: '#ffffff' });
+        this.ownedCardsText.setOrigin(1, 0);
+        this.ownedCardsText.setScrollFactor(0);
+        this.ownedCardsText.setDepth(150);
         this.pickupsGroup = this.physics.add.group({ allowGravity: false, immovable: true });
         this.physics.add.overlap(this.sakura, this.pickupsGroup, this.handlePickupOverlap, null, this);
+        this.cardStore = new CardStore(this);
+        this.cards = {
+            coronaEspinas: false,
+            sakuraShuriken: false,
+            ritmoEterno: { enabled: false, lastUse: 0, cooldown: 30000 },
+            broteExplosivo: { enabled: false, counter: 0 },
+            bendicionSilvestre: { enabled: false, activeUntil: 0 },
+            semillaDorada: { enabled: false, flowerCount: 0 },
+            espirituAliado: { enabled: false },
+            vinculoEspiritual: { enabled: false },
+            florCarmesi: false,
+            luzEspectral: { enabled: false, activeUntil: 0, reduction: 0.95 }
+        };
+        this.hazards = this.physics.add.group({ allowGravity: false });
+        this.physics.add.overlap(this.hazards, this.enemySystem ? this.enemySystem.enemies : [], (hazard, enemy) => {
+            if (enemy && enemy.enemyController) enemy.enemyController.takeDamage();
+        });
 
         const pauseButton = this.add.text(900, 30, 'Pausa', { fontSize: '18px', fill: '#000000', backgroundColor: '#ffffff' });
         pauseButton.setOrigin(0.5);
@@ -119,6 +145,23 @@ class GameScene extends Phaser.Scene {
         pauseButton.setPadding(8, 4, 8, 4);
         pauseButton.setInteractive({ useHandCursor: true });
         pauseButton.on('pointerdown', () => this.togglePause());
+        const storeHint = this.add.text(820, 30, 'B: Tienda', { fontSize: '14px', fill: '#ffffff' });
+        storeHint.setOrigin(0.5);
+        storeHint.setScrollFactor(0);
+        storeHint.setDepth(401);
+        const fsButton = this.add.text(760, 30, 'Fullscreen', { fontSize: '14px', fill: '#ffffff', backgroundColor: '#333333' });
+        fsButton.setOrigin(0.5);
+        fsButton.setScrollFactor(0);
+        fsButton.setDepth(401);
+        fsButton.setPadding(6, 4, 6, 4);
+        fsButton.setInteractive({ useHandCursor: true });
+        fsButton.on('pointerdown', () => {
+            if (this.scale && this.scale.startFullscreen) {
+                this.scale.startFullscreen();
+            } else if (document.documentElement.requestFullscreen) {
+                document.documentElement.requestFullscreen();
+            }
+        });
 
         const centerX = this.cameras.main.width / 2;
         const centerY = this.cameras.main.height / 2;
@@ -143,6 +186,7 @@ class GameScene extends Phaser.Scene {
 
         this.input.keyboard.on('keydown-P', () => this.togglePause());
         this.input.keyboard.on('keydown-B', () => this.toggleStore());
+        this.setupMobileUI();
     }
 
     // 🔥 MÉTODO PARA CREAR BARRA DE SALUD
@@ -199,6 +243,23 @@ class GameScene extends Phaser.Scene {
         if (type === 'flower') {
             this.flowers += amount;
             this.flowersText.setText(`Flores: ${this.flowers}`);
+            if (this.cards.semillaDorada.enabled) {
+                this.cards.semillaDorada.flowerCount += amount;
+                if (this.cards.semillaDorada.flowerCount >= 5) {
+                    this.cards.semillaDorada.flowerCount -= 5;
+                    this.collectResource('coin', 1);
+                }
+            }
+            if (this.cards.luzEspectral.enabled) {
+                this.cards.luzEspectral.activeUntil = this.time.now + 10000;
+            }
+            if (this.cards.broteExplosivo.enabled) {
+                this.cards.broteExplosivo.counter += amount;
+                if (this.cards.broteExplosivo.counter >= 10) {
+                    this.cards.broteExplosivo.counter -= 10;
+                    this.spawnExplosionAoE(this.sakura.x, this.sakura.y, 90);
+                }
+            }
         } else if (type === 'coin') {
             this.coins += amount;
             this.coinsText.setText(`Monedas: ${this.coins}`);
@@ -219,8 +280,36 @@ class GameScene extends Phaser.Scene {
         } else {
             this.noFlowerDeaths++;
         }
-        if (Math.random() < 0.3) {
+        let coinProb = 0.3;
+        if (this.cards.semillaDorada.enabled) {
+            // handled via per-5 flowers; keep base prob
+            coinProb = 0.3;
+        }
+        if (Math.random() < coinProb) {
             this.spawnPickup('coin', enemy.x, enemy.y);
+        }
+        if (this.cards.florCarmesi) {
+            const trail = this.add.rectangle(enemy.x, enemy.y, 60, 10, 0xff0000);
+            const zone = this.add.zone(enemy.x, enemy.y, 60, 10);
+            this.physics.add.existing(zone);
+            zone.body.setAllowGravity(false);
+            zone.visual = trail;
+            this.hazards.add(zone);
+            this.time.delayedCall(2000, () => {
+                if (zone.active) {
+                    if (zone.visual) zone.visual.destroy();
+                    zone.destroy();
+                }
+            });
+        }
+        const isElite = enemy.enemyData && (enemy.enemyData.type === 'Punisher' || enemy.enemyData.type === 'Grimm');
+        if (isElite) {
+            if (this.cards.bendicionSilvestre.enabled) {
+                this.cards.bendicionSilvestre.activeUntil = this.time.now + 60000;
+            }
+            if (this.cards.espirituAliado.enabled && Math.random() < 0.1) {
+                this.spawnAlly();
+            }
         }
     }
 
@@ -284,18 +373,18 @@ class GameScene extends Phaser.Scene {
         this.storeOverlay.setDepth(700);
         this.storeOverlay.setInteractive();
         this.storeOverlay.on('pointerdown', () => this.closeStore());
-        const lines = [
-            'Tienda de Cartas',
-            'Común: 6 flores',
-            'Rara: 10 flores',
-            'Épica: 16 flores',
-            'Re-roll: 3 monedas',
-            'Pulsa B o clic para cerrar'
-        ];
-        this.storeText = this.add.text(centerX, centerY, lines.join('\n'), { fontSize: '20px', fill: '#ffffff', align: 'center' });
-        this.storeText.setOrigin(0.5);
-        this.storeText.setScrollFactor(0);
-        this.storeText.setDepth(701);
+        const offers = this.cardStore.rollOffers();
+        this.renderStoreUI(offers, centerX, centerY);
+        this.storeKeys = this.input.keyboard.addKeys({
+            one: Phaser.Input.Keyboard.KeyCodes.ONE,
+            two: Phaser.Input.Keyboard.KeyCodes.TWO,
+            three: Phaser.Input.Keyboard.KeyCodes.THREE,
+            r: Phaser.Input.Keyboard.KeyCodes.R
+        });
+        this.storeKeys.one.on('down', () => this.purchaseCard(0));
+        this.storeKeys.two.on('down', () => this.purchaseCard(1));
+        this.storeKeys.three.on('down', () => this.purchaseCard(2));
+        this.storeKeys.r.on('down', () => this.rerollStore());
     }
 
     closeStore() {
@@ -306,7 +395,196 @@ class GameScene extends Phaser.Scene {
             this.enemySystem.enemies.forEach(e => e.anims && e.anims.resume());
         }
         if (this.storeOverlay) this.storeOverlay.destroy();
-        if (this.storeText) this.storeText.destroy();
+        this.clearStoreUI();
+        if (this.storeKeys) {
+            this.storeKeys.one.destroy();
+            this.storeKeys.two.destroy();
+            this.storeKeys.three.destroy();
+            this.storeKeys.r.destroy();
+            this.storeKeys = null;
+        }
+    }
+
+    purchaseCard(index) {
+        const ok = this.cardStore.purchase(index);
+        if (!ok) {
+            const warn = this.add.text(480, 120, 'No tienes suficientes flores', { fontSize: '18px', fill: '#ff6666' });
+            warn.setOrigin(0.5);
+            warn.setScrollFactor(0);
+            warn.setDepth(702);
+            this.time.delayedCall(1200, () => warn.destroy());
+            return;
+        }
+        const card = this.cardStore.offers[index];
+        if (card) {
+            this.ownedCards.push(card.name);
+            this.refreshOwnedCardsUI();
+        }
+        this.closeStore();
+    }
+
+    rerollStore() {
+        if (this.coins < 3) {
+            const warn = this.add.text(480, 120, 'No tienes suficientes monedas', { fontSize: '18px', fill: '#ff6666' });
+            warn.setOrigin(0.5);
+            warn.setScrollFactor(0);
+            warn.setDepth(702);
+            this.time.delayedCall(1200, () => warn.destroy());
+            return;
+        }
+        this.coins -= 3;
+        this.coinsText.setText(`Monedas: ${this.coins}`);
+        this.clearStoreUI();
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+        const offers = this.cardStore.rollOffers();
+        this.renderStoreUI(offers, centerX, centerY);
+    }
+
+    renderStoreUI(offers, centerX, centerY) {
+        this.storeUI = [];
+        const header = this.add.text(centerX, centerY - 150, `Tienda de Cartas\nFlores: ${this.flowers}  Monedas: ${this.coins}`, { fontSize: '20px', fill: '#ffffff', align: 'center' });
+        header.setOrigin(0.5);
+        header.setScrollFactor(0);
+        header.setDepth(701);
+        this.storeUI.push(header);
+        const positions = [-200, 0, 200];
+        offers.forEach((card, i) => {
+            const x = centerX + positions[i];
+            const y = centerY;
+            const color = this.cardStore.getRarityColor(card.rarity);
+            const bg = this.add.rectangle(x, y, 180, 220, 0x111111, 0.9).setStrokeStyle(3, color);
+            bg.setScrollFactor(0);
+            bg.setDepth(701);
+            bg.setInteractive();
+            bg.on('pointerdown', () => this.purchaseCard(i));
+            const title = this.add.text(x, y + 130, `${card.name}`, { fontSize: '18px', fill: '#ffffff', align: 'center', wordWrap: { width: 200 } });
+            title.setOrigin(0.5, 0);
+            title.setScrollFactor(0);
+            title.setDepth(702);
+            const sub = this.add.text(x, y + 152, `[${card.rarity}] - ${card.cost} flores`, { fontSize: '14px', fill: '#cccccc', align: 'center' });
+            sub.setOrigin(0.5, 0);
+            sub.setScrollFactor(0);
+            sub.setDepth(702);
+            const desc = this.add.text(x, y + 175, card.desc, { fontSize: '14px', fill: '#dddddd', align: 'center', wordWrap: { width: 220 } });
+            desc.setOrigin(0.5, 0);
+            desc.setScrollFactor(0);
+            desc.setDepth(702);
+            const key = this.add.text(x, y + 205, `Pulsa ${i + 1}`, { fontSize: '16px', fill: '#ffffff' });
+            key.setOrigin(0.5);
+            key.setScrollFactor(0);
+            key.setDepth(702);
+            this.storeUI.push(bg, title, sub, desc, key);
+        });
+        const reroll = this.add.text(centerX, centerY + 240, 'Re-roll: 3 monedas (R)  |  Cerrar: B o clic', { fontSize: '16px', fill: '#ffffff' });
+        reroll.setOrigin(0.5);
+        reroll.setScrollFactor(0);
+        reroll.setDepth(701);
+        this.storeUI.push(reroll);
+    }
+
+    clearStoreUI() {
+        if (this.storeUI) {
+            this.storeUI.forEach(el => el && el.destroy());
+            this.storeUI = null;
+        }
+    }
+    
+    refreshOwnedCardsUI() {
+        if (this.ownedCardsText) {
+            const list = this.ownedCards.length ? this.ownedCards.join(', ') : '-';
+            this.ownedCardsText.setText(`Cartas: ${list}`);
+        }
+    }
+
+    applyCard(name) {
+        if (name === 'Corona de espinas') {
+            this.cards.coronaEspinas = true;
+            if (!this.thornsTimer) {
+                this.thornsTimer = this.time.addEvent({
+                    delay: 3000,
+                    loop: true,
+                    callback: () => this.spawnExplosionAoE(this.sakura.x, this.sakura.y, 60)
+                });
+            }
+        } else if (name === 'Sakura Shuriken') {
+            this.cards.sakuraShuriken = true;
+            if (!this.shurikenTimer) {
+                this.shurikenTimer = this.time.addEvent({
+                    delay: 2000,
+                    loop: true,
+                    callback: () => this.spawnPlayerProjectile()
+                });
+            }
+        } else if (name === 'Ritmo eterno') {
+            this.cards.ritmoEterno.enabled = true;
+        } else if (name === 'Brote explosivo') {
+            this.cards.broteExplosivo.enabled = true;
+        } else if (name === 'Bendición silvestre') {
+            this.cards.bendicionSilvestre.enabled = true;
+        } else if (name === 'Semilla dorada') {
+            this.cards.semillaDorada.enabled = true;
+        } else if (name === 'Espíritu aliado') {
+            this.cards.espirituAliado.enabled = true;
+        } else if (name === 'Vínculo espiritual') {
+            this.cards.vinculoEspiritual.enabled = true;
+        } else if (name === 'Flor Carmesí') {
+            this.cards.florCarmesi = true;
+        } else if (name === 'Luz espectral') {
+            this.cards.luzEspectral.enabled = true;
+        }
+    }
+
+    spawnExplosionAoE(x, y, radius) {
+        const zone = this.add.zone(x, y, radius * 2, radius * 2);
+        this.physics.add.existing(zone);
+        zone.body.setAllowGravity(false);
+        if (this.enemySystem) {
+            this.enemySystem.enemies.forEach(enemy => {
+                if (enemy && enemy.active && this.physics.overlap(zone, enemy)) {
+                    if (enemy.enemyController) enemy.enemyController.takeDamage();
+                }
+            });
+        }
+        this.time.delayedCall(50, () => zone.destroy());
+    }
+
+    spawnPlayerProjectile() {
+        if (!this.enemySystem || this.enemySystem.enemies.length === 0) return;
+        const target = this.enemySystem.enemies.reduce((best, e) => {
+            if (!best) return e;
+            const d = Phaser.Math.Distance.Between(this.sakura.x, this.sakura.y, e.x, e.y);
+            const db = Phaser.Math.Distance.Between(this.sakura.x, this.sakura.y, best.x, best.y);
+            return d < db ? e : best;
+        }, null);
+        if (!target) return;
+        const bullet = this.add.rectangle(this.sakura.x, this.sakura.y - 20, 6, 6, 0x66ccff);
+        const zone = this.add.zone(bullet.x, bullet.y, 6, 6);
+        this.physics.add.existing(zone);
+        zone.body.setAllowGravity(false);
+        const angle = Phaser.Math.Angle.Between(zone.x, zone.y, target.x, target.y);
+        zone.body.setVelocity(Math.cos(angle) * 300, Math.sin(angle) * 300);
+        zone.visual = bullet;
+        this.time.addEvent({
+            delay: 16,
+            loop: true,
+            callback: () => {
+                if (!zone.active) return;
+                bullet.x = zone.x;
+                bullet.y = zone.y;
+                if (this.physics.overlap(zone, target)) {
+                    if (target.enemyController) target.enemyController.takeDamage();
+                    bullet.destroy();
+                    zone.destroy();
+                }
+            }
+        });
+        this.time.delayedCall(3000, () => {
+            if (zone.active) {
+                bullet.destroy();
+                zone.destroy();
+            }
+        });
     }
     // 🔥 MÉTODO PARA MANEJAR DAÑO AL JUGADOR
     handlePlayerDamage(amount) {
@@ -314,11 +592,35 @@ class GameScene extends Phaser.Scene {
         if (this.isPlayerDead) {
             return;
         }
+        if (this.cards.luzEspectral.enabled && this.cards.luzEspectral.activeUntil > this.time.now) {
+            amount = Math.floor(amount * this.cards.luzEspectral.reduction);
+        }
+        if (this.cards.ritmoEterno.enabled) {
+            const now = this.time.now;
+            if (now - this.cards.ritmoEterno.lastUse >= this.cards.ritmoEterno.cooldown) {
+                this.cards.ritmoEterno.lastUse = now;
+            } else {
+                if (this.sakuraController && this.sakuraController.resetCombo) {
+                    // evitar reset por daño
+                }
+            }
+        }
         
-        this.playerHealthSystem.takeDamage(amount);
+        this.playerHealthSystem.applyDamage(amount);
         this.updateHealthBar();
-        if (this.sakuraController && this.sakuraController.resetCombo) {
-            this.sakuraController.resetCombo();
+        if (this.cards.ritmoEterno.enabled) {
+            const now = this.time.now;
+            if (now - this.cards.ritmoEterno.lastUse < this.cards.ritmoEterno.cooldown) {
+                // mantener combo
+            } else {
+                if (this.sakuraController && this.sakuraController.resetCombo) {
+                    this.sakuraController.resetCombo();
+                }
+            }
+        } else {
+            if (this.sakuraController && this.sakuraController.resetCombo) {
+                this.sakuraController.resetCombo();
+            }
         }
         
         // 🔥 REPRODUCIR ANIMACIÓN DE HURT CON MÁS CONTROL
@@ -471,6 +773,70 @@ class GameScene extends Phaser.Scene {
 
         // Enemigo individual original
         this.enemyController.update();
+
+        this.updateMobileUI();
+    }
+
+    setupMobileUI() {
+        this.mobileInput = { left: false, right: false };
+        const isPortrait = () => window.innerHeight > window.innerWidth;
+        this.orientationOverlay = this.add.text(this.cameras.main.width / 2, this.cameras.main.height / 2, 'Gira tu teléfono a horizontal', { fontSize: '20px', fill: '#ffffff' });
+        this.orientationOverlay.setOrigin(0.5);
+        this.orientationOverlay.setScrollFactor(0);
+        this.orientationOverlay.setDepth(800);
+        this.createMobileButtons();
+        const updateVisibility = () => {
+            const showPortrait = isPortrait();
+            this.orientationOverlay.setVisible(this.isMobile && showPortrait);
+            const visibleButtons = this.isMobile && !showPortrait;
+            this.mobileButtons.forEach(b => b.setVisible(visibleButtons));
+        };
+        updateVisibility();
+        window.addEventListener('resize', updateVisibility);
+    }
+
+    createMobileButtons() {
+        this.mobileButtons = [];
+        const w = this.cameras.main.width;
+        const h = this.cameras.main.height;
+        const mk = (x, y, label, cb, hold=false) => {
+            const btn = this.add.rectangle(x, y, 80, 40, 0x222222).setStrokeStyle(2, 0xffffff);
+            const txt = this.add.text(x, y, label, { fontSize: '14px', fill: '#ffffff' }); txt.setOrigin(0.5);
+            btn.setScrollFactor(0); txt.setScrollFactor(0);
+            btn.setDepth(700); txt.setDepth(701);
+            btn.setInteractive({ useHandCursor: true });
+            if (hold) {
+                btn.on('pointerdown', () => cb(true));
+                btn.on('pointerup', () => cb(false));
+                btn.on('pointerout', () => cb(false));
+            } else {
+                btn.on('pointerdown', cb);
+            }
+            this.mobileButtons.push(btn, txt);
+        };
+        mk(70, h - 50, '←', v => this.mobileInput.left = v, true);
+        mk(160, h - 50, '→', v => this.mobileInput.right = v, true);
+        mk(w - 80, h - 50, 'Jump', () => this.sakuraController.jump());
+        mk(w - 80, h - 100, 'Atk', () => this.sakuraController.attack());
+        mk(w - 80, h - 150, 'Parry', () => this.sakuraController.parry());
+        mk(w - 160, h - 50, 'Dash', () => this.sakuraController.dash());
+    }
+
+    updateMobileUI() {
+        if (!this.isMobile) return;
+        const isPortrait = window.innerHeight > window.innerWidth;
+        if (isPortrait) return;
+        if (this.sakuraController && this.sakuraController.canMove && !this.sakuraController.isDashing) {
+            if (this.mobileInput.left) {
+                this.sakuraController.sakura.setVelocityX(-this.sakuraController.moveSpeed);
+                this.sakuraController.sakura.setFlipX(true);
+            } else if (this.mobileInput.right) {
+                this.sakuraController.sakura.setVelocityX(this.sakuraController.moveSpeed);
+                this.sakuraController.sakura.setFlipX(false);
+            } else {
+                // no-op, keyboard update will zero when needed
+            }
+        }
     }
 }
 

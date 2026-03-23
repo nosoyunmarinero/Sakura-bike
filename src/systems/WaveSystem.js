@@ -46,16 +46,32 @@ export default class WaveSystem {
         const spawnX = this.calculateSpawnPosition();
         const spawnY = 300; // Misma altura que el jugador
         
-        // Crear enemigo
+        const types = [
+            { type: 'Skeleton', hp: 30, dmg: 10, speed: 100, attackType: 'melee', weight: 5 },
+            { type: 'Runner', hp: 25, dmg: 12, speed: 180, attackType: 'melee', weight: 4 },
+            { type: 'Shooter', hp: 20, dmg: 8, speed: 90, attackType: 'ranged', weight: 3 },
+            { type: 'Morgans', hp: 30, dmg: 15, speed: 90, attackType: 'ranged', weight: 2 },
+            { type: 'Punisher', hp: 80, dmg: 25, speed: 70, attackType: 'melee', weight: 1 },
+            { type: 'Grimm', hp: 50, dmg: 20, speed: 110, attackType: 'melee', weight: 1 }
+        ];
+        const totalWeight = types.reduce((a, b) => a + b.weight, 0);
+        let r = Math.random() * totalWeight;
+        let chosen = types[0];
+        for (let t of types) {
+            if (r < t.weight) { chosen = t; break; }
+            r -= t.weight;
+        }
         const newEnemy = this.scene.physics.add.sprite(spawnX, spawnY, 'enemy_idle');
         newEnemy.anims.play('enemy_idle', true);
         newEnemy.body.setSize(40, 70);
         newEnemy.body.setOffset(25, 15);
         newEnemy.setCollideWorldBounds(true);
+        newEnemy.enemyData = { type: chosen.type, attackDamage: chosen.dmg, speed: chosen.speed, attackType: chosen.attackType };
         
         // Crear controlador y sistema de salud
         const enemyController = new EnemyController(this.scene, newEnemy, this.sakura);
-        const enemyHealthSystem = new HealthSystem(this.scene, newEnemy, this.enemyHitsToDie);
+        const enemyHealthSystem = new HealthSystem(this.scene, newEnemy, chosen.hp);
+        enemyHealthSystem.hitsToDie = chosen.hp;
         
         // Conectar todo
         newEnemy.enemyController = enemyController;
