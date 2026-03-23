@@ -1,91 +1,145 @@
-import BaseEnemy from '../BaseEnemy.js';
+import BaseEnemy from "../BaseEnemy.js";
 
 export default class MorgansController extends BaseEnemy {
-    constructor(scene, enemy, player) {
-        super(scene, enemy, player, {
-            maxHp:              30,
-            attackDamage:       15,
-            speed:              120,
-            attackRange:        320,
-            attackCooldown:     1500,
-            postDamageCooldown: 800,
-            hurtDuration:       300,
-            knockbackSpeed:     70,
-            deathDelay:         1800,
-        });
+  constructor(scene, enemy, player) {
+    super(scene, enemy, player, {
+      maxHp: 40,
+      attackDamage: 12,
+      speed: 80,
+      attackRange: 500,
+      attackCooldown: 1500,
+      postDamageCooldown: 600,
+      hurtDuration: 200,
+      knockbackSpeed: 30,
+      deathDelay: 1700,
+    });
 
-        this.anims = {
-            idle:   'morgans_idle',
-            walk:   'morgans_walk',
-            attack: 'morgans_attack',
-            hurt:   'morgans_hit',
-            death:  'morgans_death',
-        };
+    this.anims = {
+      idle: "morgans_idle",
+      walk: "morgans_walk",
+      attack: "morgans_attack",
+      hurt: "morgans_hit",
+      death: "morgans_death",
+    };
 
-        this.preferredMinRange = 200;
-        this.shootRange        = 320;
+    // Volvemos al valor que no se veía "tan mal"
+    this.floatY = 530;
+    this.enemy.isMorgans = true;
+    this.isDying = false;
 
-        if (enemy.enemyData) {
-            enemy.enemyData.type         = 'Morgans';
-            enemy.enemyData.attackType   = 'ranged';
-            enemy.enemyData.speed        = this.speed;
-            enemy.enemyData.attackDamage = this.attackDamage;
-        }
-
-        this.playAnim('idle');
+    if (this.enemy.body) {
+      this.enemy.body.setAllowGravity(false);
+      // Hitbox estándar para evitar desajustes visuales
+      this.enemy.setBodySize(60, 80);
+      this.enemy.setOffset(40, 30);
+      this.enemy.y = this.floatY;
     }
 
-    update() {
-        if (!super.update()) return;
+    this.playAnim("idle");
+  }
 
-        const dist = this.distanceToPlayer();
-
-        if (dist < this.preferredMinRange) {
-            this._flee();
-        } else if (dist <= this.shootRange) {
-            this._shoot();
-        } else {
-            this.moveTowardsPlayer();
-        }
+  update() {
+    if (this.isDead || this.isDying) {
+      this.enemy.setVelocity(0, 0);
+      return;
     }
 
-    _flee() {
-        this.moveAwayFromPlayer();
+    if (!super.update()) return;
+
+    // Flotado suave original
+    this.enemy.setVelocityY(0);
+    this.enemy.y = Phaser.Math.Linear(this.enemy.y, this.floatY, 0.1);
+
+    const dist = this.distanceToPlayer();
+
+    if (dist < 220) {
+      this.moveAwayFromPlayer();
+    } else if (dist <= 500) {
+      this._shoot();
+    } else {
+      this.moveTowardsPlayer();
+    }
+  }
+
+  die() {
+    if (this.isDying || this.isDead) return;
+    this.isDying = true;
+
+    // Ocultar UI
+    if (this.enemy.hpBar) this.enemy.hpBar.setVisible(false);
+    if (this.enemy.hpBarBg) this.enemy.hpBarBg.setVisible(false);
+    if (this.enemy.nameLabel) this.enemy.nameLabel.setVisible(false);
+
+    // Dejar que BaseEnemy maneje muerte, drops y cleanup
+    super.die();
+  }
+
+  _shoot() {
+    this.enemy.setVelocityX(0);
+    const dir = this.player.x - this.enemy.x;
+    this.enemy.setFlipX(dir < 0);
+
+    if (!this.canAttack()) {
+      if (
+        !this.enemy.anims.isPlaying ||
+        this.enemy.anims.currentAnim.key !== this.anims.attack
+      ) {
+        this.playAnim("idle");
+      }
+      return;
     }
 
-    _shoot() {
-        this.idle();
-        this.facePlayer();
+    this.registerAttack();
+    this.playAnim("attack");
 
-        if (!this.canAttack()) return;
+    this.scene.time.delayedCall(600, () => {
+      if (this.enemy.active && !this.isDead && !this.isHurt) {
+        this._spawnProjectile();
+      }
+    });
+  }
 
-        this.registerAttack();
-        this.playAnim('attack');
+  _spawnProjectile() {
+    const direction = this.player.x > this.enemy.x ? 1 : -1;
+    const bullet = this.scene.physics.add.sprite(
+      this.enemy.x + direction * 40,
+      this.enemy.y + 10,
+      "shooter_projectile"
+    );
 
-        // Disparar a mitad de la animación de ataque
-        this.scene.time.delayedCall(400, () => {
-            if (!this.isDead) {
-                this._spawnParryableProjectile();
-            }
-        });
+    bullet.setTint(0xcc44ff);
+    bullet.body.setAllowGravity(false);
+    bullet.setScale(1.8).setCircle(15).setOffset(5, 5);
+    bullet.setFlipX(direction > 0);
+    bullet.damage = this.attackDamage;
+    bullet.isMorgans = true;
+
+    bullet.triggerExplosion = () => {
+      if (!bullet.active) return;
+      const exp = this.scene.add.sprite(bullet.x, bullet.y, "morgans_explode");
+      exp.setScale(2.5).play("morgans_explode");
+      exp.on("animationcomplete", () => exp.destroy());
+      bullet.destroy();
+    };
+
+    if (this.scene.enemySystem?.bullets) {
+      this.scene.enemySystem.bullets.add(bullet);
     }
+    bullet.body.setVelocityX(direction * 350);
+  }
 
-    // Proyectil de Morgans — se devuelve contra enemigos al ser parryado
-    _spawnParryableProjectile() {
-        const direction = this.enemy.flipX ? -1 : 1;
-        const bx = this.enemy.x + direction * 20;
-        const by = this.enemy.y - 20;
+  moveTowardsPlayer() {
+    const dir = this.directionToPlayer();
+    this.enemy.setVelocityX(dir > 0 ? this.speed : -this.speed);
+    this.enemy.setFlipX(this.player.x - this.enemy.x < 0);
+    this.playAnim("walk");
+  }
 
-        const visual = this.scene.add.rectangle(bx, by, 10, 10, 0xcc44ff);
-        const zone   = this.scene.add.zone(bx, by, 10, 10);
-        this.scene.physics.add.existing(zone);
-        zone.body.setAllowGravity(false);
-        zone.body.setVelocityX(direction * 260);
-        zone.visual      = visual;
-        zone.reflected   = false;
-        zone.sourceEnemy = this.enemy;
-        zone.isMorgans   = true;
-
-        this.scene.enemySystem?.bullets.add(zone);
-    }
+  moveAwayFromPlayer() {
+    const dir = this.directionToPlayer();
+    const fleeDir = dir > 0 ? -1 : 1;
+    this.enemy.setVelocityX(fleeDir * this.speed);
+    this.enemy.setFlipX(this.player.x - this.enemy.x < 0);
+    this.playAnim("walk");
+  }
 }

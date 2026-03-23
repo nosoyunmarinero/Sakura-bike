@@ -47,7 +47,7 @@ export default class WaveSystem {
         makeController: (scene, enemy, sakura) =>
           new ShooterController(scene, enemy, sakura),
       },
-      /* {
+      {
         type: "Morgans",
         hp: 30,
         dmg: 15,
@@ -57,10 +57,10 @@ export default class WaveSystem {
         spriteKey: "morgans_idle",
         bodySize: { w: 40, h: 80 },
         bodyOffset: { x: 50, y: 30 },
-        scale: 1,
+        scale: 1.5,
         makeController: (scene, enemy, sakura) =>
           new MorgansController(scene, enemy, sakura),
-      },*/
+      },
     ];
   }
 

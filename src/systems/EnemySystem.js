@@ -10,6 +10,7 @@ export default class EnemySystem {
     if (!enemy || this.enemies.includes(enemy)) return;
     this.enemies.push(enemy);
 
+    // Mantenemos tu lógica original de enemyData.type
     if (!enemy.enemyData) {
       enemy.enemyData = {
         isFollowing: false,
@@ -17,6 +18,7 @@ export default class EnemySystem {
         lastDirection: 0,
         lastAttackTime: 0,
         postDamageTime: 0,
+        type: enemy.texture.key.split("_")[0],
       };
     }
 
@@ -47,37 +49,36 @@ export default class EnemySystem {
   }
 
   update() {
+    // Filtramos enemigos activos que no estén en proceso de morir
     this.enemies = this.enemies.filter(
-      (e) => e?.active && e.enemyController && !e.enemyController.isDead
+      (e) =>
+        e?.active &&
+        e.enemyController &&
+        !e.enemyController.isDying &&
+        !e.enemyController.isDead
     );
 
     this.enemies.forEach((enemy) => {
-      if (
-        !enemy?.active ||
-        !enemy.enemyController ||
-        enemy.enemyController.isDead
-      )
-        return;
+      if (!enemy?.active || !enemy.enemyController) return;
 
-      // Delegar todo el comportamiento al controller individual
+      // Delegar comportamiento al controller
       enemy.enemyController.update();
 
+      // Actualizar posición de UI
       if (enemy.nameLabel) {
-        enemy.nameLabel.x = enemy.x;
-        enemy.nameLabel.y = enemy.y - 60;
+        enemy.nameLabel.x = enemy.x - enemy.nameLabel.width / 2;
+        enemy.nameLabel.y = enemy.y - 70;
       }
 
       if (enemy.hpBarBg && enemy.hpBar && enemy.healthSystem) {
         const max = enemy.healthSystem.getMaxHealth();
         const cur = enemy.healthSystem.getHealth();
-        let pct = max > 0 ? cur / max : 0;
-        if (pct < 0.001) pct = 0;
-        pct = Phaser.Math.Clamp(pct, 0, 1);
+        let pct = Phaser.Math.Clamp(max > 0 ? cur / max : 0, 0, 1);
 
         const barWidth = 50;
         enemy.hpBarBg.x = enemy.x;
-        enemy.hpBarBg.y = enemy.y - 45;
-        enemy.hpBar.y = enemy.y - 45;
+        enemy.hpBarBg.y = enemy.y - 55;
+        enemy.hpBar.y = enemy.y - 55;
         enemy.hpBar.width = barWidth * pct;
         enemy.hpBar.x = enemy.x - barWidth / 2 + enemy.hpBar.width / 2;
       }
@@ -86,111 +87,97 @@ export default class EnemySystem {
     this.updateBullets();
   }
 
-  spawnBullet(enemy, speedX = 250) {
-    const direction = enemy.flipX ? -1 : 1;
-    const bx = enemy.x + direction * 20;
-    const by = enemy.y - 20;
-
-    const visual = this.scene.add.rectangle(bx, by, 8, 8, 0xff4444);
-    const zone = this.scene.add.zone(bx, by, 8, 8);
-    this.scene.physics.add.existing(zone);
-    zone.body.setAllowGravity(false);
-    zone.body.setVelocityX(direction * speedX);
-    zone.visual = visual;
-    zone.reflected = false;
-    zone.sourceEnemy = enemy;
-    this.bullets.add(zone);
+  _handleBulletDestruction(bullet) {
+    // Si la bala tiene una función de explosión (Morgans), la ejecutamos
+    if (bullet.isMorgans && typeof bullet.triggerExplosion === "function") {
+      bullet.triggerExplosion();
+    } else {
+      if (bullet.visual) bullet.visual.destroy();
+      bullet.destroy();
+    }
   }
 
   updateBullets() {
     this.bullets.getChildren().forEach((b) => {
-      if (!b.active) return;
+      if (!b || !b.active) return;
 
-      if (b.visual) {
+      // Sincronizar visual si existe (balas tipo zona)
+      if (b.visual && b.visual.active) {
         b.visual.x = b.x;
         b.visual.y = b.y;
       }
 
       const controller = this.scene.sakuraController;
+      const isParryActive = controller?.parryActive;
+
+      // 1. Prioridad: Parry
       const parryHit =
-        controller?.parryActive &&
-        this.scene.physics.overlap(b, controller.parryZone);
+        isParryActive && this.scene.physics.overlap(b, controller.parryZone);
 
       if (parryHit && !b.reflected) {
         b.reflected = true;
-        b.body.setVelocityX(-b.body.velocity.x);
+        if (b.body) b.body.setVelocityX(-b.body.velocity.x);
+        if (b.setFlipX) b.setFlipX(!b.flipX);
+
+        // Curación por parry exitoso
         if (this.scene.playerHealthSystem?.heal) {
-          this.scene.playerHealthSystem.heal(20);
+          this.scene.playerHealthSystem.heal(50);
           this.scene.updateHealthBar?.();
         }
         return;
       }
 
+      // 2. Colisión de balas reflejadas contra enemigos
       if (b.reflected) {
-        this.enemies.forEach((enemy) => {
+        for (let enemy of this.enemies) {
           if (enemy?.active && this.scene.physics.overlap(b, enemy)) {
-            enemy.enemyController?.takeDamage();
-            b.visual?.destroy();
-            b.destroy();
+            const damage = b.damage || 15;
+            enemy.enemyController?.takeDamage(damage);
+            this._handleBulletDestruction(b);
+            return;
           }
-        });
-        return;
-      }
-
-      if (this.scene.physics.overlap(b, this.player)) {
-        if (controller?.parryActive) {
-          b.reflected = true;
-          b.body.setVelocityX(-b.body.velocity.x);
-        } else {
-          const dmg = b.sourceEnemy?.enemyData?.attackDamage ?? 10;
-          this.scene.handlePlayerDamage?.(dmg);
-          b.visual?.destroy();
-          b.destroy();
         }
-        return;
+      }
+      // 3. Colisión de balas normales contra el jugador
+      else if (this.scene.physics.overlap(b, this.player)) {
+        if (!isParryActive) {
+          const dmg = b.damage || 10;
+          this.scene.handlePlayerDamage?.(dmg);
+          this._handleBulletDestruction(b);
+          return;
+        }
       }
 
-      if (b.x < -6000 || b.x > 6000) {
-        b.visual?.destroy();
+      // Limpieza por distancia
+      if (Math.abs(b.x - this.player.x) > 1500) {
+        if (b.visual) b.visual.destroy();
         b.destroy();
       }
     });
   }
 
-  damagePlayer(enemy) {
-    const controller = this.scene.sakuraController;
-    const now = this.scene.time.now;
-
-    if (controller?.parryActive) {
-      const delta = now - controller.parryStartTime;
-      if (this.scene.playerHealthSystem?.heal) {
-        this.scene.playerHealthSystem.heal(20);
-        if (delta <= controller.parryPerfectMs) this.knockbackEnemiesAround();
-        this.scene.updateHealthBar?.();
-      }
-      return;
-    }
-
-    const dmg = enemy?.enemyData?.attackDamage ?? 10;
-    this.scene.handlePlayerDamage?.(dmg);
+  damagePlayer(amount) {
+    // Aseguramos que amount sea numérico para evitar el NaN
+    const val = typeof amount === "number" ? amount : 10;
+    this.scene.handlePlayerDamage?.(val);
   }
 
   knockbackEnemiesAround() {
     this.enemies.forEach((enemy) => {
       if (enemy?.body) {
         const dir = enemy.x < this.player.x ? -1 : 1;
-        enemy.setVelocityX(dir * -200);
+        enemy.body.setVelocityX(dir * 200);
       }
     });
   }
 
   clearAll() {
+    this.enemies.forEach((e) => {
+      e.nameLabel?.destroy();
+      e.hpBar?.destroy();
+      e.hpBarBg?.destroy();
+    });
     this.enemies = [];
-  }
-
-  getActiveEnemies() {
-    return this.enemies.filter(
-      (e) => e?.active && e.enemyController && !e.enemyController.isDead
-    );
+    this.bullets.clear(true, true);
   }
 }
