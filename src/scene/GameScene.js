@@ -22,7 +22,7 @@ class GameScene extends Phaser.Scene {
         this.isPlayerDead = false;
         this.isPaused = false;
         this.isStoreOpen = false;
-        this.isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+        this.isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
         
         // Configurar gravedad
         this.physics.world.gravity.y = 800;

@@ -18,7 +18,9 @@ class StartScene extends Phaser.Scene {
         title.setOrigin(0.5);
         title.setScrollFactor(0);
 
-        const prompt = this.add.text(centerX, centerY + 10, 'Presiona SPACE para iniciar', {
+        const isMobile = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+        const promptText = isMobile ? 'Toca JUGAR' : 'Presiona SPACE para iniciar';
+        const prompt = this.add.text(centerX, centerY + 10, promptText, {
             fontSize: '20px',
             fill: '#ffffff'
         });
@@ -41,9 +43,31 @@ class StartScene extends Phaser.Scene {
         controlsText.setOrigin(0.5);
         controlsText.setScrollFactor(0);
 
-        this.input.keyboard.once('keydown-SPACE', () => {
-            this.scene.start('GameScene');
-        });
+        if (isMobile) {
+            const playBtn = this.add.rectangle(centerX, centerY + 50, 160, 40, 0x222222).setStrokeStyle(2, 0xffffff);
+            const playTxt = this.add.text(centerX, centerY + 50, 'JUGAR', { fontSize: '18px', fill: '#ffffff' });
+            playTxt.setOrigin(0.5);
+            playBtn.setScrollFactor(0);
+            playTxt.setScrollFactor(0);
+            playBtn.setInteractive({ useHandCursor: true });
+            playBtn.on('pointerdown', async () => {
+                try {
+                    if (this.scale && this.scale.startFullscreen) {
+                        this.scale.startFullscreen();
+                    } else if (document.documentElement.requestFullscreen) {
+                        await document.documentElement.requestFullscreen();
+                    }
+                    if (screen.orientation && screen.orientation.lock) {
+                        try { await screen.orientation.lock('landscape'); } catch(e) {}
+                    }
+                } catch(e) {}
+                this.scene.start('GameScene');
+            });
+        } else {
+            this.input.keyboard.once('keydown-SPACE', () => {
+                this.scene.start('GameScene');
+            });
+        }
 
         overlay.setInteractive();
     }
